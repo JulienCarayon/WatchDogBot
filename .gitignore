@@ -7,3 +7,4 @@ doxygen_sqlite3.db
 html
 *.tmp
 Software/ESP32/WatchDogBot/.pio/libdeps/
+Software/ESP32/WatchDogBot/.pio/build/
