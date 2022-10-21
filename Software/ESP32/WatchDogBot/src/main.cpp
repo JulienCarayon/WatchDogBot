@@ -12,8 +12,10 @@
 using namespace std;
 
 // Update these with values suitable for your network.
-const char *ssid = "HUAWEI P30 lite";                   // Enter your WiFi name
-const char *password = "0123456789"; // Enter WiFi password
+const char *ssid = "HUAWEI P30 lite"; // Enter your WiFi name
+const char *password = "0123456789";  // Enter WiFi password
+// const char *ssid = "iPhone de Dorian"; // Enter your WiFi name
+// const char *password = "WifiEc1502";   // Enter WiFi password
 const char *mqtt_server = "broker.emqx.io";
 
 #define MQTT_PORT 1883
@@ -36,9 +38,16 @@ const char *mqtt_server = "broker.emqx.io";
 #define HC_SR501_PIN 2
 #define HC_SR501_LED_PIN 15
 
+#define HC_SR04_TRIGGER_PIN 14
+#define HC_SR04_ECHO_PIN 12
+
+const unsigned long MEASURE_TIMEOUT = 25000UL; // 25ms = ~8m à 340m/s
+const float SOUND_SPEED = 340.0 / 1000;
+
 bool in_message_treatment(string message, LiquidCrystal_I2C lcd_obj);
 void clear_lcd_line(uint8_t line, LiquidCrystal_I2C lcd_obj);
 void publishSerialData(const char *topic, char *serialData);
+void hcsr04_get_data(void);
 string go_forward();
 string go_back();
 string go_left();
@@ -157,14 +166,14 @@ void callback(char *topic, byte *payload, unsigned int length)
         float temp = dht.readTemperature();
         Serial.println("temp : " + String(temp));
 
-        char buffer[64];
-        int ret = snprintf(buffer, sizeof buffer, "%f", temp);
+        char buffer[5];
+        int ret = snprintf(buffer, sizeof(buffer), "%f", temp);
 
-        if ((ret < 0) || (ret >= sizeof buffer))
+        if ((ret < 0) || (ret >= sizeof(buffer) + 64))
             client.publish(MQTT_SERIAL_INFO_CH, "LOG : EXIT ERROR !");
         else
         {
-            String command_received = convertToString(buffer, 5);
+            String command_received = convertToString(buffer, sizeof(buffer));
             Serial.println("commande_received : " + command_received);
             publishSerialData(MQTT_SERIAL_PUBLISH_CH, buffer);
         }
@@ -196,10 +205,15 @@ void setup()
     pinMode(MOTOR2_PIN2, OUTPUT);
     pinMode(MOTOR12_PWM, OUTPUT);
 
-    // HC-SR501 CAPTOR
+    // HC-SR501 MOUVEMENT CAPTOR
     pinMode(HC_SR501_PIN, INPUT);
     pinMode(HC_SR501_LED_PIN, OUTPUT);
     digitalWrite(HC_SR501_LED_PIN, LOW);
+
+    // HC-SR04 US SENSOR
+    pinMode(HC_SR04_TRIGGER_PIN, OUTPUT);
+    digitalWrite(HC_SR04_TRIGGER_PIN, LOW); // La broche TRIGGER doit être à LOW au repos
+    pinMode(HC_SR04_ECHO_PIN, INPUT);
 
     // WIFI INIT
     Serial.setTimeout(500); // Set time out for
@@ -245,8 +259,10 @@ void loop()
         else
         {
             hc_sr501_state = 0;
+            publishSerialData(MQTT_SERIAL_SECURITY_LOGGER_CH, "no detected");
             digitalWrite(HC_SR501_LED_PIN, LOW);
         }
+        // hcsr04_get_data();
     }
 }
 
@@ -264,7 +280,10 @@ bool in_message_treatment(string message, LiquidCrystal_I2C lcd_obj)
         digitalWrite(MOTOR1_PIN2, LOW);
         digitalWrite(MOTOR2_PIN1, HIGH);
         digitalWrite(MOTOR1_PIN2, LOW);
-        delay(3000);
+    }
+    else if (message == "no_back")
+    {
+        lcd_obj.print("no back");
         digitalWrite(MOTOR1_PIN1, LOW);
         digitalWrite(MOTOR2_PIN1, LOW);
     }
@@ -297,4 +316,26 @@ void clear_lcd_line(uint8_t line, LiquidCrystal_I2C lcd_obj)
     lcd_obj.setCursor(0, line);
     // char *log = (char *)"INFO : LINE CLEAR !";
     // mqtt_client.publish(MQTT_SERIAL_INFO_CH, log);
+}
+
+void hcsr04_get_data(void)
+{
+    // Sending 10 µs pulse
+    digitalWrite(HC_SR04_TRIGGER_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(HC_SR04_TRIGGER_PIN, LOW);
+
+    // Measuring time between sending the TRIG pulse and its echo
+    long measure = pulseIn(HC_SR04_ECHO_PIN, HIGH, MEASURE_TIMEOUT);
+
+    // Calculing the distance
+    float distance_mm = measure / 2.0 * SOUND_SPEED;
+
+    Serial.print(F("Distance: "));
+    Serial.print(distance_mm);
+    Serial.print(F("mm ("));
+    Serial.print(distance_mm / 10.0, 2);
+    Serial.print(F("cm, "));
+    Serial.print(distance_mm / 1000.0, 2);
+    Serial.println(F("m)"));
 }
