@@ -8,12 +8,14 @@
 #include <Adafruit_Sensor.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "Components/LCD_16x2/LCD_16x2.hpp"
+
 
 using namespace std;
 
 // Update these with values suitable for your network.
-const char *ssid = "HUAWEI P30 lite";                   // Enter your WiFi name
-const char *password = "0123456789"; // Enter WiFi password
+const char *ssid = "Maison Bieujac";                   // Enter your WiFi name
+const char *password = "Bienvenue"; // Enter WiFi password
 const char *mqtt_server = "broker.emqx.io";
 
 #define MQTT_PORT 1883
@@ -36,8 +38,7 @@ const char *mqtt_server = "broker.emqx.io";
 #define HC_SR501_PIN 2
 #define HC_SR501_LED_PIN 15
 
-bool in_message_treatment(string message, LiquidCrystal_I2C lcd_obj);
-void clear_lcd_line(uint8_t line, LiquidCrystal_I2C lcd_obj);
+// bool in_message_treatment(string message, LCD_16x2 lcd_obj);
 void publishSerialData(const char *topic, char *serialData);
 string go_forward();
 string go_back();
@@ -52,9 +53,11 @@ uint8_t hc_sr501_state = 0;
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
-LiquidCrystal_I2C lcd(0x27, 16, 2);
 DHT dht(DHT_PIN, DHT_TYPE);
 
+// LiquidCrystal_I2C LiquidCrystalI2c(0x27, 16, 2);
+
+LCD_16x2 lcd(0x27, 16, 2);
 String convertToString(char *character_array, int size)
 {
     String convert_string = "";
@@ -71,6 +74,8 @@ void setup_wifi()
     // We start by connecting to a WiFi network
     Serial.println();
     Serial.print("Connecting to ");
+    lcd.displayStringLCD("Connecting to ",0,0);
+    lcd.displayStringLCD(ssid,0,1);
     Serial.println(ssid);
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED)
@@ -149,8 +154,9 @@ void callback(char *topic, byte *payload, unsigned int length)
     Serial.println("-----------------------------------");
 
     String in_message_string = convertToString(in_message, in_message_len);
-    clear_lcd_line(0, lcd);
-    get_temperature = in_message_treatment(in_message, lcd);
+    // lcd.clearLineLCD(0);
+    // clear_lcd_line(0, lcd);
+    // get_temperature = in_message_treatment(in_message, lcd);s
 
     if (get_temperature)
     {
@@ -175,16 +181,11 @@ void callback(char *topic, byte *payload, unsigned int length)
 void setup()
 {
     Serial.begin(115200);
-
-    // LCD INIT
-    lcd.init();
-    lcd.clear();
-    lcd.backlight(); // Make sure backlight is on
-    lcd.noCursor();
-    lcd.setCursor(0, 0); // Set cursor to character 2 on line 0
-    lcd.print("WatchDog BOT");
+    Serial.println("BOOTING WATCHDOG");
+    lcd.initLCD();
+    lcd.displayStringLCD("WatchDog BOT",0,0);
     delay(2000);
-    lcd.clear();
+    lcd.clearLCD();
 
     // DHT INIT
     dht.begin();
@@ -233,6 +234,9 @@ void loop()
         time_now += period;
 
         Serial.println("Waiting commands ...");
+        lcd.clearLineLCD(1);
+        lcd.displayStringLCD("Waiting commands",0,0);
+        
 
         hc_sr501_state = digitalRead(HC_SR501_PIN);
 
@@ -250,15 +254,17 @@ void loop()
     }
 }
 
-bool in_message_treatment(string message, LiquidCrystal_I2C lcd_obj)
+bool in_message_treatment(string message, LCD_16x2 lcd_obj)
 {
-    if (message == "right")
-        lcd_obj.print("right");
-    else if (message == "left")
-        lcd_obj.print("left");
+    if (message == "right"){
+      lcd_obj.displayStringLCD("right",0,1);
+    }
+    else if (message == "left"){
+        lcd_obj.displayStringLCD("left",0,1);
+    }
     else if (message == "back")
     {
-        lcd_obj.print("back");
+        lcd_obj.displayStringLCD("back",0,1);
         digitalWrite(MOTOR12_PWM, HIGH);
         digitalWrite(MOTOR1_PIN1, HIGH);
         digitalWrite(MOTOR1_PIN2, LOW);
@@ -270,7 +276,7 @@ bool in_message_treatment(string message, LiquidCrystal_I2C lcd_obj)
     }
     else if (message == "forward")
     {
-        lcd_obj.print("forward");
+        lcd_obj.displayStringLCD("forward",0,1);
         digitalWrite(MOTOR12_PWM, HIGH);
         digitalWrite(MOTOR1_PIN1, LOW);
         digitalWrite(MOTOR1_PIN2, HIGH);
@@ -281,20 +287,22 @@ bool in_message_treatment(string message, LiquidCrystal_I2C lcd_obj)
         digitalWrite(MOTOR2_PIN2, LOW);
     }
 
-    else if (message == "temp")
+    else if (message == "temp"){
+    lcd_obj.displayStringLCD("forward",0,1);
         return true;
+    }
 
     return false;
 }
 
-void clear_lcd_line(uint8_t line, LiquidCrystal_I2C lcd_obj)
-{
-    for (int column = 0; column < 15; column++)
-    {
-        lcd_obj.setCursor(column, line);
-        lcd_obj.print(" ");
-    }
-    lcd_obj.setCursor(0, line);
-    // char *log = (char *)"INFO : LINE CLEAR !";
-    // mqtt_client.publish(MQTT_SERIAL_INFO_CH, log);
-}
+// void clear_lcd_line(uint8_t line, LiquidCrystal_I2C lcd_obj)
+// {
+//     for (int column = 0; column < 15; column++)
+//     {
+//         lcd_obj.setCursor(column, line);
+//         lcd_obj.print(" ");
+//     }
+//     lcd_obj.setCursor(0, line);
+//     // char *log = (char *)"INFO : LINE CLEAR !";
+//     // mqtt_client.publish(MQTT_SERIAL_INFO_CH, log);
+// }
