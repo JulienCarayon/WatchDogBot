@@ -8,32 +8,20 @@
 #include <Adafruit_Sensor.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "Components/ControlMotors/ControlMotors_L298n.hpp"
+#include "Components/ClientMQTT/ClientMQTT.hpp"
 
 using namespace std;
 
 // Update these with values suitable for your network.
-const char *ssid = "HUAWEI P30 lite"; // Enter your WiFi name
-const char *password = "0123456789";  // Enter WiFi password
-// const char *ssid = "iPhone de Dorian"; // Enter your WiFi name
-// const char *password = "WifiEc1502";   // Enter WiFi password
+// const char *ssid = "HUAWEI P30 lite"; // Enter your WiFi name
+// const char *password = "0123456789";  // Enter WiFi password
+const char *ssid = "Livebox-0209";                   // Enter your WiFi name
+const char *password = "4612EA4513FE6C618F8CCF7C70"; // Enter WiFi password
+// const char *ssid = "SER@YNOV";                 // Enter your WiFi name
+// const char *password = "Q156@QeRd^YuRgRouX7T"; // Enter WiFi password
 const char *mqtt_server = "broker.emqx.io";
-
-#define MQTT_PORT 1883
-#define MQTT_USER "test"
-#define MQTT_PASSWORD "test"
-#define MQTT_SERIAL_PUBLISH_CH "DOG/PUBLISH"
-#define MQTT_SERIAL_RECEIVER_CH "DOG/RECEIVE"
-#define MQTT_SERIAL_SECURITY_LOGGER_CH "DOG/SECURITY"
-#define MQTT_SERIAL_INFO_CH "DOG/INFO"
-
-#define DHT_PIN 4
-#define DHT_TYPE DHT11
-
-#define MOTOR2_PIN1 16
-#define MOTOR2_PIN2 17
-#define MOTOR1_PIN1 18
-#define MOTOR1_PIN2 19
-#define MOTOR12_PWM 5
+uint16_t port = 1883;
 
 #define HC_SR501_PIN 2
 #define HC_SR501_LED_PIN 15
@@ -44,166 +32,41 @@ const char *mqtt_server = "broker.emqx.io";
 const unsigned long MEASURE_TIMEOUT = 25000UL; // 25ms = ~8m à 340m/s
 const float SOUND_SPEED = 340.0 / 1000;
 
-bool in_message_treatment(string message, LiquidCrystal_I2C lcd_obj);
-void clear_lcd_line(uint8_t line, LiquidCrystal_I2C lcd_obj);
-void publishSerialData(const char *topic, char *serialData);
+void test_motors(string message, ControlMotorsL298n motors);
 void hcsr04_get_data(void);
-string go_forward();
-string go_back();
-string go_left();
-string go_right();
 
-char in_message[16];
-uint8_t in_message_len;
-bool get_temperature = false;
-uint8_t state_motor = 0;
-uint8_t hc_sr501_state = 0;
+static char in_message[16];
+uint8_t in_message_len = 0;
+
+int period = 3000;
+unsigned long time_now = 0;
+
+CALLBACK *callbackReturn;
+CALLBACK callbackData;
+
+uint8_t motor12_pin1 = 16;
+uint8_t motor12_pin2 = 17;
+uint8_t motor34_pin1 = 18;
+uint8_t motor34_pin2 = 5;
+uint8_t motorPWM12_pin = 4;
+uint8_t motorPWM34_pin = 19;
+uint8_t old_dutyCycle = 0;
+
+string topic;
+string message;
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
-LiquidCrystal_I2C lcd(0x27, 16, 2);
-DHT dht(DHT_PIN, DHT_TYPE);
 
-String convertToString(char *character_array, int size)
-{
-    String convert_string = "";
-    for (int i = 0; i < size; i++)
-    {
-        convert_string += character_array[i];
-    }
-    return convert_string;
-}
-
-void setup_wifi()
-{
-    delay(10);
-    // We start by connecting to a WiFi network
-    Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(500);
-        Serial.print(".");
-    }
-
-    // print your WiFi shield's IP address:
-    randomSeed(micros());
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-}
-
-void reconnect()
-{
-    // Loop until we're reconnected
-    while (!client.connected())
-    {
-        Serial.print("Attempting MQTT connection...");
-        // Create a random client ID
-        String clientId = "ESP32Client-";
-        clientId += String(random(0xffff), HEX);
-        // Attempt to connect
-        if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD))
-        {
-            Serial.println(" connected");
-            // Once connected, publish an announcement...
-            client.publish(MQTT_SERIAL_INFO_CH, "LOG : CONNECTED");
-            // ... and resubscribe
-            client.subscribe(MQTT_SERIAL_RECEIVER_CH);
-        }
-        else
-        {
-            Serial.print("failed, rc=");
-            Serial.print(client.state());
-            Serial.println(" try again in 5 seconds");
-            // Wait 5 seconds before retrying
-            int i = 5;
-            while (i > 0)
-            {
-                delay(1000);
-                Serial.print(i);
-                Serial.println("...");
-                i--;
-            }
-        }
-    }
-}
-
-void callback(char *topic, byte *payload, unsigned int length)
-{
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print("]\n");
-
-    for (int index = 0; index < 16; index++)
-    {
-        if (in_message[index] != '\0')
-        {
-            in_message[index] = '\0';
-        }
-    }
-    in_message_len = length;
-
-    for (int i = 0; i < length; i++)
-    {
-        in_message[i] = char(payload[i]);
-    }
-
-    Serial.println("-----------------------------------");
-    Serial.print("Received from mqtt : ");
-    Serial.println(in_message);
-    Serial.println("-----------------------------------");
-
-    String in_message_string = convertToString(in_message, in_message_len);
-    clear_lcd_line(0, lcd);
-    get_temperature = in_message_treatment(in_message, lcd);
-
-    if (get_temperature)
-    {
-        float temp = dht.readTemperature();
-        Serial.println("temp : " + String(temp));
-
-        char buffer[5];
-        int ret = snprintf(buffer, sizeof(buffer), "%f", temp);
-
-        if ((ret < 0) || (ret >= sizeof(buffer) + 64))
-            client.publish(MQTT_SERIAL_INFO_CH, "LOG : EXIT ERROR !");
-        else
-        {
-            String command_received = convertToString(buffer, sizeof(buffer));
-            Serial.println("commande_received : " + command_received);
-            publishSerialData(MQTT_SERIAL_PUBLISH_CH, buffer);
-        }
-        get_temperature = false;
-    }
-}
+ControlMotorsL298n motors(motor12_pin1, motor12_pin2, motor34_pin1, motor34_pin2, motorPWM12_pin, motorPWM34_pin);
+ClientMQTT clientMQTT(ssid, password, mqtt_server, port, client, callbackReturn);
 
 void setup()
 {
     Serial.begin(115200);
 
-    // LCD INIT
-    lcd.init();
-    lcd.clear();
-    lcd.backlight(); // Make sure backlight is on
-    lcd.noCursor();
-    lcd.setCursor(0, 0); // Set cursor to character 2 on line 0
-    lcd.print("WatchDog BOT");
-    delay(2000);
-    lcd.clear();
-
-    // DHT INIT
-    dht.begin();
-
     // MOTOR INIT
-    pinMode(MOTOR1_PIN1, OUTPUT);
-    pinMode(MOTOR1_PIN2, OUTPUT);
-    pinMode(MOTOR2_PIN1, OUTPUT);
-    pinMode(MOTOR2_PIN2, OUTPUT);
-    pinMode(MOTOR12_PWM, OUTPUT);
+    motors.init();
 
     // HC-SR501 MOUVEMENT CAPTOR
     pinMode(HC_SR501_PIN, INPUT);
@@ -212,110 +75,68 @@ void setup()
 
     // HC-SR04 US SENSOR
     pinMode(HC_SR04_TRIGGER_PIN, OUTPUT);
-    digitalWrite(HC_SR04_TRIGGER_PIN, LOW); // La broche TRIGGER doit être à LOW au repos
+    digitalWrite(HC_SR04_TRIGGER_PIN, LOW);
     pinMode(HC_SR04_ECHO_PIN, INPUT);
 
     // WIFI INIT
-    Serial.setTimeout(500); // Set time out for
-    setup_wifi();
+    Serial.setTimeout(500);
+    clientMQTT.setupWifiMQTT();
 
     // MQTT CLIENT INIT
-    client.setServer(mqtt_server, MQTT_PORT);
-    client.setCallback(callback);
-    reconnect();
+    clientMQTT.setServerMQTT();
+    clientMQTT.setCallbackMQTT();
+    clientMQTT.reconnectMQTT();
 }
-
-void publishSerialData(const char *topic, char *serialData)
-{
-    if (!client.connected())
-    {
-        reconnect();
-    }
-    client.publish(topic, serialData);
-    Serial.println("Publish information : " + String(serialData));
-}
-
-int period = 3000;
-unsigned long time_now = 0;
 
 void loop()
 {
     void setValue(byte payload);
-    client.loop();
-    if (millis() >= time_now + period)
+    clientMQTT.loopMQTT();
+    callbackData = clientMQTT.getCallbackReturn();
+
+    if (callbackData.new_message)
     {
-        time_now += period;
+        Serial.print("main.cpp  : ");
+        Serial.println(callbackData.message.c_str());
+        topic = callbackData.topic;
+        message = callbackData.message;
 
-        Serial.println("Waiting commands ...");
-
-        hc_sr501_state = digitalRead(HC_SR501_PIN);
-
-        if (hc_sr501_state)
+        if (topic == "DOG/DUTYCYCLE")
         {
-            Serial.println("WARNING : HC-SR501 has detected a movement");
-            publishSerialData(MQTT_SERIAL_SECURITY_LOGGER_CH, "detected");
-            digitalWrite(HC_SR501_LED_PIN, HIGH);
+            Serial.println("======= || DUTYCYCLE || =======");
+            if (old_dutyCycle != atoi(message.c_str()))
+            {
+                Serial.println("======= SPEED ======= ");
+                old_dutyCycle = atoi(message.c_str());
+                motors.setMotorsSpeed(atoi(message.c_str()));
+                motors.getMotorsSpeed();
+                Serial.println("----> NEW MOTOR SPEED SET");
+            }
         }
-        else
+        else if (topic == "DOG/MOTORS")
         {
-            hc_sr501_state = 0;
-            publishSerialData(MQTT_SERIAL_SECURITY_LOGGER_CH, "no detected");
-            digitalWrite(HC_SR501_LED_PIN, LOW);
+            Serial.println("======= DIRECTION ======= ");
+            test_motors(message, motors);
         }
-        // hcsr04_get_data();
+        else if (topic == "DOG/RECEIVE")
+        {
+            Serial.println("======= TEMP =======");
+        }
     }
 }
 
-bool in_message_treatment(string message, LiquidCrystal_I2C lcd_obj)
+void test_motors(string message, ControlMotorsL298n motors)
 {
     if (message == "right")
-        lcd_obj.print("right");
+        motors.goRight();
     else if (message == "left")
-        lcd_obj.print("left");
+        motors.goLeft();
     else if (message == "back")
-    {
-        lcd_obj.print("back");
-        digitalWrite(MOTOR12_PWM, HIGH);
-        digitalWrite(MOTOR1_PIN1, HIGH);
-        digitalWrite(MOTOR1_PIN2, LOW);
-        digitalWrite(MOTOR2_PIN1, HIGH);
-        digitalWrite(MOTOR1_PIN2, LOW);
-    }
-    else if (message == "no_back")
-    {
-        lcd_obj.print("no back");
-        digitalWrite(MOTOR1_PIN1, LOW);
-        digitalWrite(MOTOR2_PIN1, LOW);
-    }
+        motors.goBack();
     else if (message == "forward")
-    {
-        lcd_obj.print("forward");
-        digitalWrite(MOTOR12_PWM, HIGH);
-        digitalWrite(MOTOR1_PIN1, LOW);
-        digitalWrite(MOTOR1_PIN2, HIGH);
-        digitalWrite(MOTOR2_PIN1, LOW);
-        digitalWrite(MOTOR2_PIN2, HIGH);
-        delay(3000);
-        digitalWrite(MOTOR1_PIN2, LOW);
-        digitalWrite(MOTOR2_PIN2, LOW);
-    }
-
-    else if (message == "temp")
-        return true;
-
-    return false;
-}
-
-void clear_lcd_line(uint8_t line, LiquidCrystal_I2C lcd_obj)
-{
-    for (int column = 0; column < 15; column++)
-    {
-        lcd_obj.setCursor(column, line);
-        lcd_obj.print(" ");
-    }
-    lcd_obj.setCursor(0, line);
-    // char *log = (char *)"INFO : LINE CLEAR !";
-    // mqtt_client.publish(MQTT_SERIAL_INFO_CH, log);
+        motors.goForward();
+    else if (message == "no_left" || message == "no_right" || message == "no_back" || message == "no_forward" || message == "stop")
+        motors.stop();
 }
 
 void hcsr04_get_data(void)
