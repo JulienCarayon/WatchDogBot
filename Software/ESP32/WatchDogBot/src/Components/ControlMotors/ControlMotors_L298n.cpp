@@ -26,8 +26,7 @@ void ControlMotorsL298n::init(void)
 
 void ControlMotorsL298n::setMotorsSpeed(uint8_t PWM_percentage)
 {
-    // Serial.println(String(PWM_percentage));
-    _dutyCycle = map(PWM_percentage, 0, 100, 80, 255);
+    _dutyCycle = map(PWM_percentage, 0, 100, 90, 255);
     if (PWM_percentage > 0)
     {
         analogWrite(_motorsPWM12_pin, _dutyCycle);

@@ -57,9 +57,10 @@ void ClientMQTT::reconnectMQTT()
             // Once connected, publish an announcement...
             _clientMQTT.publish(MQTT_SERIAL_INFO_CH, "LOG : CONNECTED");
             // ... and resubscribe
-            _clientMQTT.subscribe(MQTT_SERIAL_RECEIVER_CH);
+            _clientMQTT.subscribe(MQTT_SERIAL_TEMP_CH);
             _clientMQTT.subscribe(MQTT_SERIAL_MOTORS_CH);
             _clientMQTT.subscribe(MQTT_SERIAL_DUTYCYCLE_MOTORS_CH);
+            _clientMQTT.subscribe(MQTT_SERIAL_GUARD_CH);
         }
         else
         {
@@ -115,7 +116,7 @@ CALLBACK ClientMQTT::callbackMQTT2(char *topic, uint8_t *payload, unsigned int l
 {
     CALLBACK callbackReturnClass;
 
-    Serial.print("Message arrived [");
+    Serial.print("\n*** MESSAGE ARRIVED [");
     Serial.print(topic);
     Serial.print("]\n");
 
@@ -139,10 +140,9 @@ CALLBACK ClientMQTT::callbackMQTT2(char *topic, uint8_t *payload, unsigned int l
     Serial.println("-----------------------------------");
     Serial.print("Received from mqtt : ");
     Serial.println(in_message);
-    Serial.println("-----------------------------------");
+    Serial.println("----------------------------------- ***\n");
 
     string in_message_string = convertToString(in_message, in_message_len);
-    Serial.println(in_message_string.c_str());
 
     callbackReturnClass.topic = (string)topic;
     callbackReturnClass.message = in_message_string;

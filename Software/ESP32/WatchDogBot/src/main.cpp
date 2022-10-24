@@ -25,7 +25,6 @@ uint16_t port = 1883;
 
 #define HC_SR501_PIN 2
 #define HC_SR501_LED_PIN 15
-
 #define HC_SR04_TRIGGER_PIN 14
 #define HC_SR04_ECHO_PIN 12
 
@@ -33,6 +32,7 @@ const unsigned long MEASURE_TIMEOUT = 25000UL; // 25ms = ~8m à 340m/s
 const float SOUND_SPEED = 340.0 / 1000;
 
 void test_motors(string message, ControlMotorsL298n motors);
+void treatmentMQTTCommands(CALLBACK command);
 void hcsr04_get_data(void);
 
 static char in_message[16];
@@ -42,7 +42,7 @@ int period = 3000;
 unsigned long time_now = 0;
 
 CALLBACK *callbackReturn;
-CALLBACK callbackData;
+CALLBACK callbackStruct;
 
 uint8_t motor12_pin1 = 16;
 uint8_t motor12_pin2 = 17;
@@ -90,39 +90,9 @@ void setup()
 
 void loop()
 {
-    void setValue(byte payload);
     clientMQTT.loopMQTT();
-    callbackData = clientMQTT.getCallbackReturn();
-
-    if (callbackData.new_message)
-    {
-        Serial.print("main.cpp  : ");
-        Serial.println(callbackData.message.c_str());
-        topic = callbackData.topic;
-        message = callbackData.message;
-
-        if (topic == "DOG/DUTYCYCLE")
-        {
-            Serial.println("======= || DUTYCYCLE || =======");
-            if (old_dutyCycle != atoi(message.c_str()))
-            {
-                Serial.println("======= SPEED ======= ");
-                old_dutyCycle = atoi(message.c_str());
-                motors.setMotorsSpeed(atoi(message.c_str()));
-                motors.getMotorsSpeed();
-                Serial.println("----> NEW MOTOR SPEED SET");
-            }
-        }
-        else if (topic == "DOG/MOTORS")
-        {
-            Serial.println("======= DIRECTION ======= ");
-            test_motors(message, motors);
-        }
-        else if (topic == "DOG/RECEIVE")
-        {
-            Serial.println("======= TEMP =======");
-        }
-    }
+    callbackStruct = clientMQTT.getCallbackReturn();
+    treatmentMQTTCommands(callbackStruct);
 }
 
 void test_motors(string message, ControlMotorsL298n motors)
@@ -159,4 +129,43 @@ void hcsr04_get_data(void)
     Serial.print(F("cm, "));
     Serial.print(distance_mm / 1000.0, 2);
     Serial.println(F("m)"));
+}
+
+void treatmentMQTTCommands(CALLBACK command)
+{
+    if (command.new_message)
+    {
+        // Serial.print("main.cpp  : ");
+        // Serial.println(command.message.c_str());
+        topic = command.topic;
+        message = command.message;
+
+        if (topic == "DOG/DUTYCYCLE")
+        {
+            if (old_dutyCycle != atoi(message.c_str()))
+            {
+                Serial.print("SET NEW MOTORS SPEED ....... ");
+                old_dutyCycle = atoi(message.c_str());
+                motors.setMotorsSpeed(atoi(message.c_str()));
+                // motors.getMotorsSpeed();
+                Serial.println("----> NEW MOTOR SPEED SET");
+            }
+        }
+        else if (topic == "DOG/MOTORS")
+        {
+            test_motors(message, motors);
+        }
+        else if (topic == "DOG/TEMP")
+        {
+            Serial.println("*** FROM TOPIC [DOG/RECEIVE] ***");
+        }
+        else if (topic == "DOG/SECURITY")
+        {
+            Serial.println("*** FROM TOPIC [DOG/SECURITY] ***");
+        }
+        else if (topic == "DOG/GUARD")
+        {
+            Serial.println("*** FROM TOPIC [DOG/GUARD] ***");
+        }
+    }
 }
