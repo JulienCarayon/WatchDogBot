@@ -25,7 +25,6 @@
 #define MQTT_SERIAL_GUARD_CH "DOG/GUARD"
 
 using namespace std;
-// WiFiClient wifiClient2;
 
 struct CALLBACK;
 
@@ -33,7 +32,7 @@ class ClientMQTT : public PubSubClient
 {
 public:
     ClientMQTT(const char *ssid, const char *password, const char *mqtt_server,
-               uint16_t port, PubSubClient client, CALLBACK *callbackObj);
+               uint16_t port, PubSubClient client);
 
     void setupWifiMQTT();
     void pubSubClientMQTT(WiFiClient wifiClient_obj);
@@ -44,9 +43,7 @@ public:
     void loopMQTT();
     void setCallbackMQTT();
     static CALLBACK callbackMQTT2(char *topic, uint8_t *payload, unsigned int length);
-
     CALLBACK getCallbackReturn();
-    static uint8_t _in_message_len;
 
 private:
     uint16_t _port;

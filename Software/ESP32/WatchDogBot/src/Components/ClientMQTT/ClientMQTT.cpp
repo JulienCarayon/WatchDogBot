@@ -2,7 +2,7 @@
 #include "Arduino.h"
 
 ClientMQTT::ClientMQTT(const char *ssid, const char *password, const char *mqtt_server,
-                       uint16_t port, PubSubClient client, CALLBACK *callbackObj)
+                       uint16_t port, PubSubClient client)
 {
     _ssid = ssid;
     _password = password;

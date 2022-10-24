@@ -47,6 +47,7 @@ void ControlMotorsL298n::stop(void)
     digitalWrite(_motor12_pin2, LOW);
     digitalWrite(_motor34_pin1, LOW);
     digitalWrite(_motor34_pin2, LOW);
+    _availableMotorsSpeedConfiguration = false;
 }
 
 void ControlMotorsL298n::goBack(void)

@@ -33,15 +33,8 @@ const float SOUND_SPEED = 340.0 / 1000;
 
 void test_motors(string message, ControlMotorsL298n motors);
 void treatmentMQTTCommands(CALLBACK command);
-void hcsr04_get_data(void);
+float hcsr04_get_data(void);
 
-static char in_message[16];
-uint8_t in_message_len = 0;
-
-int period = 3000;
-unsigned long time_now = 0;
-
-CALLBACK *callbackReturn;
 CALLBACK callbackStruct;
 
 uint8_t motor12_pin1 = 16;
@@ -55,11 +48,13 @@ uint8_t old_dutyCycle = 0;
 string topic;
 string message;
 
+bool guardModeAcivate = false;
+
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
 
 ControlMotorsL298n motors(motor12_pin1, motor12_pin2, motor34_pin1, motor34_pin2, motorPWM12_pin, motorPWM34_pin);
-ClientMQTT clientMQTT(ssid, password, mqtt_server, port, client, callbackReturn);
+ClientMQTT clientMQTT(ssid, password, mqtt_server, port, client);
 
 void setup()
 {
@@ -93,6 +88,11 @@ void loop()
     clientMQTT.loopMQTT();
     callbackStruct = clientMQTT.getCallbackReturn();
     treatmentMQTTCommands(callbackStruct);
+
+    if (guardModeAcivate)
+    {
+        // autonomous mode
+    }
 }
 
 void test_motors(string message, ControlMotorsL298n motors)
@@ -109,7 +109,7 @@ void test_motors(string message, ControlMotorsL298n motors)
         motors.stop();
 }
 
-void hcsr04_get_data(void)
+float hcsr04_get_data(void)
 {
     // Sending 10 µs pulse
     digitalWrite(HC_SR04_TRIGGER_PIN, HIGH);
@@ -129,6 +129,8 @@ void hcsr04_get_data(void)
     Serial.print(F("cm, "));
     Serial.print(distance_mm / 1000.0, 2);
     Serial.println(F("m)"));
+
+    return distance_mm;
 }
 
 void treatmentMQTTCommands(CALLBACK command)
@@ -158,6 +160,7 @@ void treatmentMQTTCommands(CALLBACK command)
         else if (topic == "DOG/TEMP")
         {
             Serial.println("*** FROM TOPIC [DOG/RECEIVE] ***");
+            // need to publish temp
         }
         else if (topic == "DOG/SECURITY")
         {
@@ -166,6 +169,10 @@ void treatmentMQTTCommands(CALLBACK command)
         else if (topic == "DOG/GUARD")
         {
             Serial.println("*** FROM TOPIC [DOG/GUARD] ***");
+            if (message == "guard_on")
+                guardModeAcivate = true;
+            else if (message == "guard_off")
+                guardModeAcivate = false;
         }
     }
 }
