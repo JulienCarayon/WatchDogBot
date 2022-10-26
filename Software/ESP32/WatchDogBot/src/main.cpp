@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include "Components/ControlMotors/ControlMotors_L298n.hpp"
 #include "Components/ClientMQTT/ClientMQTT.hpp"
+#include "Components/WS2812B_LED_Controller/WS2812B_LED_Controller.hpp"
 
 using namespace std;
 
@@ -27,6 +28,9 @@ uint16_t port = 1883;
 #define HC_SR501_LED_PIN 15
 #define HC_SR04_TRIGGER_PIN 14
 #define HC_SR04_ECHO_PIN 12
+
+#define I2C_ADDRESS 0x20
+#define LEDS_COUNT 10
 
 const unsigned long MEASURE_TIMEOUT = 25000UL; // 25ms = ~8m à 340m/s
 const float SOUND_SPEED = 340.0 / 1000;
@@ -55,10 +59,14 @@ PubSubClient client(wifiClient);
 
 ControlMotorsL298n motors(motor12_pin1, motor12_pin2, motor34_pin1, motor34_pin2, motorPWM12_pin, motorPWM34_pin);
 ClientMQTT clientMQTT(ssid, password, mqtt_server, port, client);
+WS2812B_Controller LED_strip(I2C_ADDRESS, LEDS_COUNT, TYPE_GRB);
 
 void setup()
 {
     Serial.begin(115200);
+
+    // STRIP LED
+    LED_strip.begin();
 
     // MOTOR INIT
     motors.init();
@@ -93,6 +101,7 @@ void loop()
     {
         // autonomous mode
     }
+    LED_strip.WeWillFuckYou();
 }
 
 void test_motors(string message, ControlMotorsL298n motors)
