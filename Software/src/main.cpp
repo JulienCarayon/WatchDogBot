@@ -9,10 +9,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "Components/LCD_16x2/LCD_16x2.hpp"
-
 #include "Components/ControlMotors/ControlMotors_L298n.hpp"
 #include "Components/ClientMQTT/ClientMQTT.hpp"
 #include "Components/WS2812B_LED_Controller/WS2812B_LED_Controller.hpp"
+#include "Components/DHT_11/DHT_11.hpp"
 
 using namespace std;
 
@@ -27,6 +27,9 @@ uint16_t port = 1883;
 #define HC_SR501_LED_PIN 15
 #define HC_SR04_TRIGGER_PIN 14
 #define HC_SR04_ECHO_PIN 12
+
+#define DHT_PIN 33
+#define DHT_TYPE DHT11
 
 #define I2C_ADDRESS 0x20
 #define LEDS_COUNT 10
@@ -59,18 +62,22 @@ PubSubClient client(wifiClient);
 ControlMotorsL298n motors(motor12_pin1, motor12_pin2, motor34_pin1, motor34_pin2, motorPWM12_pin, motorPWM34_pin);
 ClientMQTT clientMQTT(ssid, password, mqtt_server, port, client);
 WS2812B_Controller LED_strip(I2C_ADDRESS, LEDS_COUNT, TYPE_GRB);
+LCD_16x2 lcd(0x27, 16, 2);
+DHT_11 dht11_sensor(DHT_PIN, DHT_TYPE);
 
 void setup()
 {
     Serial.begin(115200);
     Serial.println("BOOTING WATCHDOG");
+
+    // LCD INIT
     lcd.initLCD();
-    lcd.displayStringLCD("WatchDog BOT",0,0);
+    lcd.displayStringLCD("WatchDog BOT", 0, 0);
     delay(2000);
     lcd.clearLCD();
 
     // DHT INIT
-    dht.begin();
+    dht11_sensor.init();
 
     // STRIP LED
     LED_strip.begin();
@@ -106,15 +113,14 @@ void loop()
 
     if (guardModeAcivate)
     {
-        time_now += period;
         Serial.println("Waiting commands ...");
         lcd.clearLineLCD(1);
-        lcd.displayStringLCD("Waiting commands",0,0);
+        lcd.displayStringLCD("Waiting commands", 0, 0);
     }
     LED_strip.WeWillFuckYou();
 }
 
-        // autonomous mode
+// autonomous mode
 void test_motors(string message, ControlMotorsL298n motors)
 {
     if (message == "right")
