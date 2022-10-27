@@ -115,6 +115,9 @@ public:
     uint32_t Wheel(byte pos);
 
     void WeWillFuckYou(void);
+    void blinkingRight(void);
+    void blinkingLeft(void);
+    void warning(void);
 };
 
 #endif

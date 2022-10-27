@@ -465,3 +465,17 @@ void WS2812B_Controller::WeWillFuckYou(void)
         show();
     }
 }
+
+void WS2812B_Controller::blinkingRight(void)
+{
+    for (int j = 0; j < 5; j++)
+    {
+        for (int i = 0; i < LEDS_COUNT; i++)
+        {
+            strip.setLedColor(i, 255, 140, 0);
+            strip.show();
+            delay(delayval);
+        }
+        delay(500);
+    }
+}
