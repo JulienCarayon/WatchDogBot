@@ -466,16 +466,156 @@ void WS2812B_Controller::WeWillFuckYou(void)
     }
 }
 
+void WS2812B_Controller::blinkingLeft(void)
+{
+    int j = 9;
+    for (int i = 9; i >= 5; i--)
+    {
+        setLedColor(i, 255, 140, 0);
+        setLedColor(i - j, 255, 140, 0);
+        show();
+
+        delay(50);
+        j -= 2;
+    }
+
+    j = 9;
+    for (int i = 0; i <= 5; i++)
+    {
+        setLedColor(i, 0, 0, 0);
+        setLedColor(i + j, 0, 0, 0);
+        show();
+
+        delay(50);
+        j -= 2;
+    }
+}
+
 void WS2812B_Controller::blinkingRight(void)
 {
-    for (int j = 0; j < 5; j++)
+    int j = 1;
+
+    for (int i = 5; i <= 9; i++)
     {
-        for (int i = 0; i < LEDS_COUNT; i++)
-        {
-            strip.setLedColor(i, 255, 140, 0);
-            strip.show();
-            delay(delayval);
-        }
-        delay(500);
+        setLedColor(i, 255, 140, 0);
+        setLedColor(i - j, 255, 140, 0);
+        show();
+
+        delay(50);
+        j += 2;
+    }
+
+    j = 1;
+    for (int i = 5; i <= 9; i++)
+    {
+        setLedColor(i, 0, 0, 0);
+        setLedColor(i - j, 0, 0, 0);
+        show();
+
+        delay(50);
+        j += 2;
+    }
+}
+
+void WS2812B_Controller::warning(void)
+{
+    int j = 9;
+    for (int i = 9; i >= 8; i--)
+    {
+        setLedColor(i, 255, 140, 0);
+        setLedColor(i - j, 255, 140, 0);
+        show();
+
+        delay(50);
+        j -= 2;
+    }
+
+    j = 1;
+
+    for (int i = 5; i <= 6; i++)
+    {
+        setLedColor(i, 255, 140, 0);
+        setLedColor(i - j, 255, 140, 0);
+        show();
+
+        delay(50);
+        j += 2;
+    }
+
+    j = 9;
+    for (int i = 0; i <= 2; i++)
+    {
+        setLedColor(i, 0, 0, 0);
+        setLedColor(i + j, 0, 0, 0);
+        show();
+
+        delay(50);
+        j -= 2;
+    }
+    j = 1;
+    for (int i = 5; i <= 6; i++)
+    {
+        setLedColor(i, 0, 0, 0);
+        setLedColor(i - j, 0, 0, 0);
+        show();
+
+        delay(50);
+        j += 2;
+    }
+}
+
+void WS2812B_Controller::policeGang(void)
+{
+    int j = 9;
+    for (int i = 9; i >= 8; i--)
+    {
+        setLedColor(i, 255, 0, 0);
+        setLedColor(i - j, 0, 0, 255);
+        show();
+
+        delay(50);
+        j -= 2;
+    }
+
+    j = 1;
+
+    for (int i = 5; i <= 6; i++)
+    {
+        setLedColor(i, 255, 0, 0);
+        setLedColor(i - j, 0, 0, 255);
+        show();
+
+        delay(50);
+        j += 2;
+    }
+
+    j = 9;
+    for (int i = 0; i <= 2; i++)
+    {
+        setLedColor(i, 0, 0, 0);
+        setLedColor(i + j, 0, 0, 0);
+        show();
+
+        delay(50);
+        j -= 2;
+    }
+    j = 1;
+    for (int i = 5; i <= 6; i++)
+    {
+        setLedColor(i, 0, 0, 0);
+        setLedColor(i - j, 0, 0, 0);
+        show();
+
+        delay(50);
+        j += 2;
+    }
+}
+
+void WS2812B_Controller::turnOFF(void)
+{
+    for (int i = 0; i < LEDS_COUNT; i++)
+    {
+        setLedColor(i, 0, 0, 0);
+        show();
     }
 }

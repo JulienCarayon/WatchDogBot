@@ -27,11 +27,26 @@ void ClientMQTT::setupWifiMQTT()
     Serial.print("Connecting to ");
     Serial.println(_ssid);
     WiFi.begin(_ssid, _password);
+
+    int timeout_counter = 0;
+
     while (WiFi.status() != WL_CONNECTED)
     {
-        delay(500);
         Serial.print(".");
+        delay(200);
+        timeout_counter++;
+        if (timeout_counter >= 10 * 5)
+        {
+            Serial.println("RESTART");
+            ESP.restart();
+        }
     }
+
+    // while (WiFi.status() != WL_CONNECTED)
+    //  {
+    //      delay(500);
+    //      Serial.print(".");
+    //  }
 
     // print your WiFi shield's IP address:
     randomSeed(micros());
@@ -61,6 +76,7 @@ void ClientMQTT::reconnectMQTT()
             _clientMQTT.subscribe(MQTT_SERIAL_MOTORS_CH);
             _clientMQTT.subscribe(MQTT_SERIAL_DUTYCYCLE_MOTORS_CH);
             _clientMQTT.subscribe(MQTT_SERIAL_GUARD_CH);
+            _clientMQTT.subscribe(MQTT_SERIAL_SOC_CH);
         }
         else
         {

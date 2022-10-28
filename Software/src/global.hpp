@@ -15,6 +15,12 @@ struct CALLBACK
     string message;
 };
 
+struct HC_SR04_DATA_T
+{
+    float distance_right;
+    float distance_left;
+};
+
 string convertToString(char *character_array, int size);
 
 #endif
