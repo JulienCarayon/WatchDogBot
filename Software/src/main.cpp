@@ -63,6 +63,7 @@ uint16_t get_voltage_percentage();
 void guard_mode();
 void get_temperature_from_DHT(void);
 void police_BIP(void);
+void buzzer_off(void);
 
 CALLBACK callbackStruct;
 
@@ -158,7 +159,7 @@ void loop()
     {
         Serial.println("GUARD MODE ACTIVATE");
         lcd.clearLineLCD(1);
-        lcd.displayStringLCD("GUARD MODE  : ON", 0, 0);
+        lcd.displayStringLCD("GUARD MODE : ON ", 0, 0);
 
         hc_sr04_data_t.distance_right = hcsr04_get_data(HC_SR04_RIGHT);
         hc_sr04_data_t.distance_left = hcsr04_get_data(HC_SR04_LEFT);
@@ -166,7 +167,7 @@ void loop()
         if (hcsr501_get_data())
         {
             Serial.println("==================================== > Detected");
-            LED_strip.policeGang();
+            // LED_strip.policeGang();
             police_BIP();
         }
         Serial.println("Distance right : " + String(hc_sr04_data_t.distance_right));
@@ -174,8 +175,10 @@ void loop()
     }
     else
     {
+        lcd.displayStringLCD("GUARD MODE : OFF", 0, 0);
         lcd.clearLineLCD(1);
         LED_strip.turnOFF();
+        buzzer_off();
     }
 
     // test.get_temperature_sensor();
@@ -213,7 +216,7 @@ uint16_t get_voltage_percentage()
     if (soc > (old_soc + 1) || soc < (old_soc - 1))
     {
         old_soc = soc;
-        Serial.println("SOC : " + soc);
+        // Serial.println("SOC : " + soc);
 
         char buffer[64];
         int ret = snprintf(buffer, sizeof(buffer), "%d", soc);
@@ -360,15 +363,20 @@ void guard_mode()
 
 void police_BIP(void)
 {
-    for (uint16_t i = 500; i < 1000; i++)
-    {
-        tone(BUZZER_PIN, i);
-        delay(1);
-    }
 
-    for (uint16_t i = 1000; i > 500; i--)
+    for (uint16_t i = 700; i < 800; i++)
     {
         tone(BUZZER_PIN, i);
-        delay(1);
+        delay(5);
     }
+    for (uint16_t i = 800; i > 700; i--)
+    {
+        tone(BUZZER_PIN, i);
+        delay(5);
+    }
+}
+
+void buzzer_off(void)
+{
+    tone(BUZZER_PIN, 0);
 }

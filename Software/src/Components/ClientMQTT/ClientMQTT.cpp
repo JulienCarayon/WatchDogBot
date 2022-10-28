@@ -132,9 +132,12 @@ CALLBACK ClientMQTT::callbackMQTT2(char *topic, uint8_t *payload, unsigned int l
 {
     CALLBACK callbackReturnClass;
 
+    // if (topic != "DOG/SOC")
+    //{
     Serial.print("\n*** MESSAGE ARRIVED [");
     Serial.print(topic);
     Serial.print("]\n");
+    //}
 
     char in_message[16];
     uint8_t in_message_len = 0;
@@ -153,11 +156,13 @@ CALLBACK ClientMQTT::callbackMQTT2(char *topic, uint8_t *payload, unsigned int l
         in_message[i] = char(payload[i]);
     }
 
+    // if (topic != "DOG/SOC")
+    //{
     Serial.println("-----------------------------------");
     Serial.print("Received from mqtt : ");
     Serial.println(in_message);
     Serial.println("----------------------------------- ***\n");
-
+    //}
     string in_message_string = convertToString(in_message, in_message_len);
 
     callbackReturnClass.topic = (string)topic;
