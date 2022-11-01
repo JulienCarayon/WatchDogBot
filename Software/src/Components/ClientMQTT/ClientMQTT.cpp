@@ -1,4 +1,4 @@
-#include "Components/ClientMQTT/ClientMQTT.hpp"
+#include "ClientMQTT.hpp"
 #include "Arduino.h"
 
 #define DEBUG_MODE

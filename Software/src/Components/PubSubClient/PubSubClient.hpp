@@ -4,14 +4,14 @@
   http://knolleary.net
 */
 
-#ifndef PubSubClient_h
-#define PubSubClient_h
+#ifndef PubSubClient_hpp
+#define PubSubClient_hpp
 
 #include <Arduino.h>
 #include "IPAddress.h"
 #include "Client.h"
 #include "Stream.h"
-#include "../../global.hpp"
+#include "../Global/Global.hpp"
 
 #define MQTT_VERSION_3_1 3
 #define MQTT_VERSION_3_1_1 4
