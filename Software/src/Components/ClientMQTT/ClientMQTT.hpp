@@ -10,8 +10,9 @@
 #include "Wire.h"
 #include "WiFi.h"
 #include "WiFiClient.h"
-#include <PubSubClient.h>
-#include <global.hpp>
+
+#include "Components/PubSubClient/PubSubClient.h"
+#include "global.hpp"
 
 #define MQTT_USER "test"
 #define MQTT_PASSWORD "test"
@@ -23,6 +24,8 @@
 #define MQTT_SERIAL_MOTORS_CH "DOG/MOTORS"
 #define MQTT_SERIAL_DUTYCYCLE_MOTORS_CH "DOG/DUTYCYCLE"
 #define MQTT_SERIAL_GUARD_CH "DOG/GUARD"
+#define MQTT_SERIAL_SOC_CH "DOG/SOC"
+#define MQTT_SERIAL_STATE_CH "DOG/STATE"
 
 using namespace std;
 
@@ -44,6 +47,7 @@ public:
     void setCallbackMQTT();
     static CALLBACK callbackMQTT2(char *topic, uint8_t *payload, unsigned int length);
     CALLBACK getCallbackReturn();
+    static bool _guardmode_activate;
 
 private:
     uint16_t _port;

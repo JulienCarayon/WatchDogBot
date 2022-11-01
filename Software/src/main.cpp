@@ -2,98 +2,108 @@
 #include "LiquidCrystal_I2C.h"
 #include "Wire.h"
 #include <WiFi.h>
-#include <PubSubClient.h>
 #include <string>
-#include <DHT.h>
 #include <Adafruit_Sensor.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "Components/LCD_16x2/LCD_16x2.hpp"
-#include "Components/ControlMotors/ControlMotors_L298n.hpp"
 #include "Components/ClientMQTT/ClientMQTT.hpp"
-#include "Components/WS2812B_LED_Controller/WS2812B_LED_Controller.hpp"
-#include "Components/DHT_11/DHT_11.hpp"
+#include "Components/PubSubClient/PubSubClient.h"
+
+#include "global.hpp"
 
 using namespace std;
 
-// Update these with values suitable for your network.
+char main_buffer_temp[10];
+char main_buffer_soc[10];
+char main_buffer_state[10];
+TREATMENT_CMD_T treatment_cmd_t;
+bool guarding_mode_activate = false;
 
-const char *ssid = "Livebox-0209";                   // Enter your WiFi name
-const char *password = "4612EA4513FE6C618F8CCF7C70"; // Enter WiFi password
+/* WIFI & MQTT VAR*/
+const char *ssid = "Livebox-0209";
+const char *password = "4612EA4513FE6C618F8CCF7C70";
+// const char *ssid = "SER@YNOV";
+// const char *password = "Q156@QeRd^YuRgRouX7T";
+// const char *ssid = "HUAWEI P30 lite";
+// const char *ssid = "iPhone de Julien";
+// const char *password = "0123456789";
 const char *mqtt_server = "broker.emqx.io";
 uint16_t port = 1883;
-
-#define HC_SR501_PIN 2
-#define HC_SR501_LED_PIN 15
-#define HC_SR04_TRIGGER_PIN 14
-#define HC_SR04_ECHO_PIN 12
-
-#define DHT_PIN 33
-#define DHT_TYPE DHT11
-
-#define I2C_ADDRESS 0x20
-#define LEDS_COUNT 10
-
-const unsigned long MEASURE_TIMEOUT = 25000UL; // 25ms = ~8m à 340m/s
-const float SOUND_SPEED = 340.0 / 1000;
-
-void test_motors(string message, ControlMotorsL298n motors);
-void treatmentMQTTCommands(CALLBACK command);
-float hcsr04_get_data(void);
-
-CALLBACK callbackStruct;
-
-uint8_t motor12_pin1 = 16;
-uint8_t motor12_pin2 = 17;
-uint8_t motor34_pin1 = 18;
-uint8_t motor34_pin2 = 5;
-uint8_t motorPWM12_pin = 4;
-uint8_t motorPWM34_pin = 19;
-uint8_t old_dutyCycle = 0;
-
 string topic;
 string message;
+CALLBACK callbackStruct;
 
-bool guardModeAcivate = false;
+/* FSM VAR */
+FSM_T fsm_t = IDLE;
+FSM_T old_fsm_t = IDLE;
+char *fsm;
+g_fsm_flags fsm_flags;
 
+/* SOC VAR*/
+uint16_t soc_data = 0;
+uint16_t old_soc = 0;
+uint8_t soc = 0;
+uint16_t adc_read = 0;
+uint16_t div_voltage = 0;
+uint16_t bat_voltage = 0;
+bool publish_soc = false;
+
+bool publish_state = false;
+
+/* DHT SENSOR VAR */
+float temperature = 0.0;
+float old_temperature = 0.0;
+bool publish_temperature = false;
+
+HC_SR04_DATA_T hc_sr04_data_t;
+
+void guard_mode();
+void reset_IHM(char *dutycycle);
+void treatment_publish_flags(void);
+
+/* CLASS OBJECTS*/
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
-
-ControlMotorsL298n motors(motor12_pin1, motor12_pin2, motor34_pin1, motor34_pin2, motorPWM12_pin, motorPWM34_pin);
+ControlMotorsL298n motors(MOTOR12_PIN1, MOTOR12_PIN2, MOTOR34_PIN1, MOTOR34_PIN2, MOTORPWM12_PIN, MOTORPWM34_PIN);
 ClientMQTT clientMQTT(ssid, password, mqtt_server, port, client);
-WS2812B_Controller LED_strip(I2C_ADDRESS, LEDS_COUNT, TYPE_GRB);
-LCD_16x2 lcd(0x27, 16, 2);
-DHT_11 dht11_sensor(DHT_PIN, DHT_TYPE);
+WS2812B_Controller LED_strip(LED_I2C_ADDRESS, LEDS_COUNT, TYPE_GRB);
+LCD_16x2 lcd(LCD_I2C_ADDRESS, LCD_COLUMN_NUMBER, LCD_LINE_NUMBER);
+DHT_sensor temperature_sensor(9, DHT11);
 
 void setup()
 {
     Serial.begin(115200);
-    Serial.println("BOOTING WATCHDOG");
+
+    // BUZZER INIT
+    pinMode(BUZZER_PIN, OUTPUT);
+    init_buzzer_sound();
 
     // LCD INIT
     lcd.initLCD();
-    lcd.displayStringLCD("WatchDog BOT", 0, 0);
+    lcd.displayStringLCD("WATCHDOG BOT", 2, 0);
+    lcd.displayStringLCD("... INIT ...", 2, 1);
     delay(2000);
     lcd.clearLCD();
 
     // DHT INIT
-    dht11_sensor.init();
+    temperature_sensor.initDHT();
 
-    // STRIP LED
+    // STRIP LED INIT
     LED_strip.begin();
 
     // MOTOR INIT
     motors.init();
 
-    // HC-SR501 MOUVEMENT CAPTOR
+    // HC-SR501 MOVEMENT CAPTOR
     pinMode(HC_SR501_PIN, INPUT);
-    pinMode(HC_SR501_LED_PIN, OUTPUT);
-    digitalWrite(HC_SR501_LED_PIN, LOW);
 
     // HC-SR04 US SENSOR
-    pinMode(HC_SR04_TRIGGER_PIN, OUTPUT);
-    digitalWrite(HC_SR04_TRIGGER_PIN, LOW);
-    pinMode(HC_SR04_ECHO_PIN, INPUT);
+    pinMode(HC_SR04_TRIGGER_PIN_LEFT, OUTPUT);
+    pinMode(HC_SR04_ECHO_PIN_LEFT, INPUT);
+    digitalWrite(HC_SR04_TRIGGER_PIN_LEFT, LOW);
+    pinMode(HC_SR04_TRIGGER_PIN_RIGHT, OUTPUT);
+    pinMode(HC_SR04_ECHO_PIN_RIGHT, INPUT);
+    digitalWrite(HC_SR04_TRIGGER_PIN_RIGHT, LOW);
 
     // WIFI INIT
     Serial.setTimeout(500);
@@ -103,102 +113,93 @@ void setup()
     clientMQTT.setServerMQTT();
     clientMQTT.setCallbackMQTT();
     clientMQTT.reconnectMQTT();
+
+    // INIT IHM
+    reset_IHM("0");
+    init_lcd_ihm(lcd);
+
+#ifdef DEBUG_MODE
+    Serial.print("motors obj add 0 : ");
+    std::cout << &motors << std::endl;
+#endif
 }
 
 void loop()
 {
+    publish_temperature = get_temperature_from_DHT(temperature_sensor, main_buffer_temp, lcd);
+    publish_soc = get_voltage_percentage(main_buffer_soc, lcd);
+
     clientMQTT.loopMQTT();
     callbackStruct = clientMQTT.getCallbackReturn();
-    treatmentMQTTCommands(callbackStruct);
+    fsm_t = roooh_static_member_reference_muste_beeeeee(fsm_t, callbackStruct);
 
-    if (guardModeAcivate)
+    delay(100);
+
+    publish_state = fsm_state(main_buffer_state, fsm_t, &fsm_flags, lcd);
+    treatment_cmd_t = treatment_MQTT_Commands(callbackStruct, fsm_flags, &motors, LED_strip);
+
+    if (fsm_t == GUARDING && !guarding_mode_activate)
     {
-        Serial.println("Waiting commands ...");
-        lcd.clearLineLCD(1);
-        lcd.displayStringLCD("Waiting commands", 0, 0);
+        guarding_mode_activate = true;
+        reset_IHM("30");
     }
-    LED_strip.WeWillFuckYou();
-}
-
-// autonomous mode
-void test_motors(string message, ControlMotorsL298n motors)
-{
-    if (message == "right")
-        motors.goRight();
-    else if (message == "left")
-        motors.goLeft();
-    else if (message == "back")
-        motors.goBack();
-    else if (message == "forward")
-        motors.goForward();
-    else if (message == "no_left" || message == "no_right" || message == "no_back" || message == "no_forward" || message == "stop")
-        motors.stop();
-}
-
-float hcsr04_get_data(void)
-{
-    // Sending 10 µs pulse
-    digitalWrite(HC_SR04_TRIGGER_PIN, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(HC_SR04_TRIGGER_PIN, LOW);
-
-    // Measuring time between sending the TRIG pulse and its echo
-    long measure = pulseIn(HC_SR04_ECHO_PIN, HIGH, MEASURE_TIMEOUT);
-
-    // Calculing the distance
-    float distance_mm = measure / 2.0 * SOUND_SPEED;
-
-    Serial.print(F("Distance: "));
-    Serial.print(distance_mm);
-    Serial.print(F("mm ("));
-    Serial.print(distance_mm / 10.0, 2);
-    Serial.print(F("cm, "));
-    Serial.print(distance_mm / 1000.0, 2);
-    Serial.println(F("m)"));
-
-    return distance_mm;
-}
-
-void treatmentMQTTCommands(CALLBACK command)
-{
-    if (command.new_message)
+    if (fsm_t == MANUAL && guarding_mode_activate)
     {
-        // Serial.print("main.cpp  : ");
-        // Serial.println(command.message.c_str());
-        topic = command.topic;
-        message = command.message;
+        guarding_mode_activate = false;
+        reset_IHM("0");
+    }
+    treatment_publish_flags();
+    LED_managment(treatment_cmd_t, LED_strip);
+    // delay(1000);
+}
 
-        if (topic == "DOG/DUTYCYCLE")
-        {
-            if (old_dutyCycle != atoi(message.c_str()))
-            {
-                Serial.print("SET NEW MOTORS SPEED ....... ");
-                old_dutyCycle = atoi(message.c_str());
-                motors.setMotorsSpeed(atoi(message.c_str()));
-                // motors.getMotorsSpeed();
-                Serial.println("----> NEW MOTOR SPEED SET");
-            }
-        }
-        else if (topic == "DOG/MOTORS")
-        {
-            test_motors(message, motors);
-        }
-        else if (topic == "DOG/TEMP")
-        {
-            Serial.println("*** FROM TOPIC [DOG/RECEIVE] ***");
-            // need to publish temp
-        }
-        else if (topic == "DOG/SECURITY")
-        {
-            Serial.println("*** FROM TOPIC [DOG/SECURITY] ***");
-        }
-        else if (topic == "DOG/GUARD")
-        {
-            Serial.println("*** FROM TOPIC [DOG/GUARD] ***");
-            if (message == "guard_on")
-                guardModeAcivate = true;
-            else if (message == "guard_off")
-                guardModeAcivate = false;
-        }
+void guard_mode()
+{
+    /* TO DO */
+}
+
+void reset_IHM(char *dutycycle)
+{
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_right");
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_left");
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_back");
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_forward");
+    motors.stop();
+    motors.setMotorsSpeed(atoi(dutycycle));
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_DUTYCYCLE_MOTORS_CH, dutycycle);
+}
+
+void treatment_publish_flags(void)
+{
+    if (publish_state)
+    {
+#ifdef DEBUG_MODE
+        Serial.print("STATE BUFFER : ");
+        Serial.println(main_buffer_state);
+#endif
+        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_STATE_CH, main_buffer_state);
+    }
+    if (publish_temperature)
+        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_TEMP_CH, main_buffer_temp);
+    if (publish_soc)
+        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_SOC_CH, main_buffer_soc);
+
+    if (treatment_cmd_t.ihm_managment == "turn_off")
+    {
+        Serial.println("STATE MOTORS : ");
+        Serial.print("old_state : ");
+        Serial.println(String(treatment_cmd_t.old_state_motors.c_str()));
+        Serial.print("actual state : ");
+        Serial.println(String(treatment_cmd_t.actual_state_motors.c_str()));
+        Serial.print("ihm mana : ");
+        Serial.println(String(treatment_cmd_t.ihm_managment.c_str()));
+        if (treatment_cmd_t.old_state_motors == "right")
+            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_right");
+        if (treatment_cmd_t.old_state_motors == "left")
+            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_left");
+        if (treatment_cmd_t.old_state_motors == "back")
+            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_back");
+        if (treatment_cmd_t.old_state_motors == "forward")
+            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_forward");
     }
 }

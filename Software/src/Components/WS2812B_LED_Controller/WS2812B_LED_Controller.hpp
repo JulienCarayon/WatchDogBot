@@ -118,6 +118,10 @@ public:
     void blinkingRight(void);
     void blinkingLeft(void);
     void warning(void);
+    void policeGang(void);
+    void turnOFF(void);
+    void frontCarHeadlight(void);
+    void backCarHeadlight(void);
 };
 
 #endif
