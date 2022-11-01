@@ -119,7 +119,7 @@ public:
     void blinkingLeft(void);
     void warning(void);
     void policeGang(void);
-    void turnOFF(void);
+    void turnOFF(bool front, bool back);
     void frontCarHeadlight(void);
     void backCarHeadlight(void);
 };

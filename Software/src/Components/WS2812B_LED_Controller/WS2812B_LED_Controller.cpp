@@ -611,12 +611,23 @@ void WS2812B_Controller::policeGang(void)
     }
 }
 
-void WS2812B_Controller::turnOFF(void)
+void WS2812B_Controller::turnOFF(bool front, bool back)
 {
-    for (int i = 0; i < LEDS_COUNT; i++)
+    if (front)
     {
-        setLedColor(i, 0, 0, 0);
-        show();
+        for (int i = 0; i <= 4; i++)
+        {
+            setLedColor(i, 0, 0, 0);
+            show();
+        }
+    }
+    if (back)
+    {
+        for (int i = 5; i <= 9; i++)
+        {
+            setLedColor(i, 0, 0, 0);
+            show();
+        }
     }
 }
 
@@ -643,4 +654,3 @@ void WS2812B_Controller::backCarHeadlight(void)
         }
     }
 }
-

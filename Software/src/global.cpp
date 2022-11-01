@@ -450,6 +450,11 @@ TREATMENT_CMD_T control_motors(string message, ControlMotorsL298n *motors, WS281
         {
             treatment_cmd.ihm_managment = "turn_off";
             motors->stop();
+            treatment_cmd.go_right = false;
+            treatment_cmd.go_left = false;
+            treatment_cmd.go_back = false;
+            treatment_cmd.go_forward = false;
+            treatment_cmd.stop = true;
         }
     }
     else
@@ -473,7 +478,7 @@ void LED_managment(TREATMENT_CMD_T treatment_cmd, WS2812B_Controller LED_strip)
     }
     if (treatment_cmd.go_forward)
     {
-        LED_strip.turnOFF();
+        LED_strip.turnOFF(0, 1);
         LED_strip.frontCarHeadlight();
     }
 
