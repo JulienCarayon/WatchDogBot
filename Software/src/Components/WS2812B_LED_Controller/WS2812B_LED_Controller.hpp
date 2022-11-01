@@ -120,6 +120,8 @@ public:
     void warning(void);
     void policeGang(void);
     void turnOFF(void);
+    void frontCarHeadlight(void);
+    void backCarHeadlight(void);
 };
 
 #endif

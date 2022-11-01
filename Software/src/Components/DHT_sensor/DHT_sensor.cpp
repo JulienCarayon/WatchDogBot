@@ -17,6 +17,6 @@ void DHT_sensor::initDHT(void)
 float DHT_sensor::get_temperature_sensor(void)
 {
     temp = _sensor.readTemperature(false, false);
-    Serial.println(String(temp));
+    // Serial.println(String(temp));
     return temp;
 }

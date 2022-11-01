@@ -1,0 +1,90 @@
+*** MESSAGE ARRIVED [DOG/MOTORS]
+-----------------------------------
+Received from mqtt : forward
+----------------------------------- ***
+
+COUCOU LES LOULOUS 
+Waiting commands ...
+
+*** MESSAGE ARRIVED [DOG/MOTORS]
+-----------------------------------
+Received from mqtt : back
+----------------------------------- ***
+
+COUCOU LES LOULOUS 
+OUI MAIS NON 
+Publish information : no_forward
+
+*** MESSAGE ARRIVED [DOG/MOTORS]
+-----------------------------------
+Received from mqtt : no_forward
+----------------------------------- ***
+
+COUCOU LES LOULOUS 
+AMEN
+Publish information : no_back
+
+*** MESSAGE ARRIVED [DOG/MOTORS]
+-----------------------------------
+Received from mqtt : no_back
+----------------------------------- ***
+
+COUCOU LES LOULOUS
+Waiting commands ...
+
+
+
+
+
+
+
+
+
+*** MESSAGE ARRIVED [DOG/MOTORS]
+-----------------------------------
+Received from mqtt : forward
+----------------------------------- ***
+
+COUCOU LES LOULOUS 
+Waiting commands ...
+
+*** MESSAGE ARRIVED [DOG/MOTORS]
+-----------------------------------
+Received from mqtt : back
+----------------------------------- ***
+
+COUCOU LES LOULOUS 
+OUI MAIS NON 
+Publish information : no_forward
+
+*** MESSAGE ARRIVED [DOG/MOTORS]
+-----------------------------------
+Received from mqtt : no_forward
+----------------------------------- ***
+
+Waiting commands ...
+COUCOU LES LOULOUS 
+Publish information : 86
+AMEN
+Publish information : no_back
+
+*** MESSAGE ARRIVED [DOG/SOC]
+-----------------------------------
+Received from mqtt : 86
+----------------------------------- ***
+
+Publish information : 90
+
+*** MESSAGE ARRIVED [DOG/MOTORS]
+-----------------------------------
+Received from mqtt : no_back
+----------------------------------- ***
+
+COUCOU LES LOULOUS 
+
+*** MESSAGE ARRIVED [DOG/SOC]
+-----------------------------------
+Received from mqtt : 90
+----------------------------------- ***
+
+Waiting commands ...
