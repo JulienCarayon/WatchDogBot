@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "Components/ClientMQTT/ClientMQTT.hpp"
-#include "Components/PubSubClient/PubSubClient.h"
+#include "Components/PubSubClient/PubSubClient.hpp"
 
-#include "global.hpp"
+#include "Components/Global/Global.hpp"
 
 using namespace std;
 

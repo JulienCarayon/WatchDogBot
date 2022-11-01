@@ -11,8 +11,8 @@
 #include "WiFi.h"
 #include "WiFiClient.h"
 
-#include "Components/PubSubClient/PubSubClient.h"
-#include "global.hpp"
+#include "../PubSubClient/PubSubClient.hpp"
+#include "../Global/Global.hpp"
 
 #define MQTT_USER "test"
 #define MQTT_PASSWORD "test"
