@@ -8,8 +8,9 @@
 #include <stdlib.h>
 #include "Components/ClientMQTT/ClientMQTT.hpp"
 #include "Components/PubSubClient/PubSubClient.hpp"
-
 #include "Components/Global/Global.hpp"
+
+
 
 using namespace std;
 
@@ -57,9 +58,10 @@ bool publish_temperature = false;
 
 HC_SR04_DATA_T hc_sr04_data_t;
 
-void guard_mode();
-void reset_IHM(char *dutycycle);
+void reset_IHM(char *dutycycle, string state);
 void treatment_publish_flags(void);
+bool guard_mode();
+void manageObstable();
 
 /* CLASS OBJECTS*/
 WiFiClient wifiClient;
@@ -98,12 +100,10 @@ void setup()
     pinMode(HC_SR501_PIN, INPUT);
 
     // HC-SR04 US SENSOR
-    pinMode(HC_SR04_TRIGGER_PIN_LEFT, OUTPUT);
-    pinMode(HC_SR04_ECHO_PIN_LEFT, INPUT);
-    digitalWrite(HC_SR04_TRIGGER_PIN_LEFT, LOW);
-    pinMode(HC_SR04_TRIGGER_PIN_RIGHT, OUTPUT);
-    pinMode(HC_SR04_ECHO_PIN_RIGHT, INPUT);
-    digitalWrite(HC_SR04_TRIGGER_PIN_RIGHT, LOW);
+
+    pinMode(HC_SR04_TRIGGER_PIN,      OUTPUT);
+    pinMode(HC_SR04_ECHO_PIN,         INPUT);
+    digitalWrite(HC_SR04_TRIGGER_PIN, LOW);
 
     // WIFI INIT
     Serial.setTimeout(500);
@@ -115,7 +115,7 @@ void setup()
     clientMQTT.reconnectMQTT();
 
     // INIT IHM
-    reset_IHM("0");
+    reset_IHM("0", "start");
     init_lcd_ihm(lcd);
 
 #ifdef DEBUG_MODE
@@ -126,12 +126,16 @@ void setup()
 
 void loop()
 {
+    // clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_PUBLISH_CH, std::to_string(hcsr04_get_distance("right")));
     publish_temperature = get_temperature_from_DHT(temperature_sensor, main_buffer_temp, lcd);
     publish_soc = get_voltage_percentage(main_buffer_soc, lcd);
 
     clientMQTT.loopMQTT();
     callbackStruct = clientMQTT.getCallbackReturn();
-    fsm_t = roooh_static_member_reference_muste_beeeeee(fsm_t, callbackStruct);
+    if (fsm_t != DETECTED)
+    {
+        fsm_t = roooh_static_member_reference_muste_beeeeee(fsm_t, callbackStruct);
+    }
 
     delay(100);
 
@@ -141,25 +145,170 @@ void loop()
     if (fsm_t == GUARDING && !guarding_mode_activate)
     {
         guarding_mode_activate = true;
-        reset_IHM("30");
+        reset_IHM("40", "guard");
     }
     if (fsm_t == MANUAL && guarding_mode_activate)
     {
         guarding_mode_activate = false;
-        reset_IHM("0");
+        reset_IHM("0", "manual");
     }
+    // Serial.println("Before treatment_publish_flags");
     treatment_publish_flags();
+    // Serial.println("After treatment_publish_flags");
+
     LED_managment(treatment_cmd_t, LED_strip);
     // delay(1000);
+    // Serial.println("E");
+    if (fsm_t == GUARDING)
+    {
+        Serial.println("ENTERING fsm_t == GUARDING");
+        bool detected = guard_mode();
+        Serial.print("detected state : ");
+        Serial.println(detected);
+        if (detected != 0){
+            LED_strip.policeGang();
+            fsm_t = DETECTED;
+        }
+        else{
+            fsm_t = GUARDING;
+            // LED_strip.turnOFF();
+            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_SECURITY_LOGGER_CH, "RAS");
+
+
+        }
+        Serial.println("EXITING fsm_t == GUARDING");
+    }
+    if (fsm_t == DETECTED){
+        LED_strip.policeGang();
+        police_BIP();
+        motors.stop();
+        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_SECURITY_LOGGER_CH, "DETECTED");
+    }
 }
 
-void guard_mode()
-{
-    /* TO DO */
+uint16_t STEP_TIME = 3;
+uint16_t DEG_90_TIME = 350;
+uint16_t HALF_TURN_TIME = (DEG_90_TIME*2);
+uint16_t DETECTION_TRESHOLD = 200;
+uint16_t ANGLE_VALUE = 90;
+uint16_t BACKING_TIME = 300;
+
+bool isObstacleDetected(void){
+  if (hcsr04_get_distance() <= DETECTION_TRESHOLD){
+      return true;
+  }
+  else {
+    return false;
+  }
 }
 
-void reset_IHM(char *dutycycle)
+
+
+bool guard_mode()
 {
+     /* TO DO */
+    bool detected = false;
+    motors.setMotorsSpeed(40);
+    motors.goForward();
+    Serial.println("ENTERING GUARD FUNCTION");
+    if(isObstacleDetected()){
+        
+        manageObstable();
+        int duration = 0;
+        delay(6000);
+        int i = 0;
+        while(i<1000){
+            detected = hcsr501_get_data();
+            Serial.print("while : ");
+            Serial.println(detected);
+            if(detected){
+                Serial.print("if detected : ");
+                Serial.println(detected);
+                break;
+            }
+            delay(1);
+            i++;
+        }
+    }
+    else{
+        
+        
+    }
+    Serial.println("EXITING GUARD FUNCTION");
+    Serial.print("detected state : ");
+    Serial.println(detected);
+    return detected;
+}
+
+void manageObstable(){
+    motors.stop();
+    motors.setMotorsSpeed(20);
+    motors.goBack();
+    delay(BACKING_TIME);
+    motors.stop();
+    motors.setMotorsSpeed(80);
+    motors.goLeft();
+    delay(HALF_TURN_TIME);
+    motors.stop();
+
+    motors.goLeft();
+    delay(DEG_90_TIME);
+    motors.stop();
+
+    uint16_t ultraSound[90];
+    for(int i = 0; i<89;i++){
+      motors.setMotorsSpeed(100);
+      motors.goRight();
+      delay(STEP_TIME);
+      motors.stop();
+      ultraSound[i]=hcsr04_get_distance();
+
+    }
+
+
+    // motors.goLeft();
+    // delay(DEG_90_TIME/2);
+    // motors.stop();
+
+  uint16_t highest_distance = 0;
+  uint16_t highest_distance_index = 0;
+
+
+  for(int scan = 0;scan<89;scan++){
+    if(ultraSound[scan]>highest_distance){
+      highest_distance=ultraSound[scan];
+      highest_distance_index=scan;
+      Serial.print("LOOP scan : ");
+      Serial.println(scan);
+    }
+  }
+  Serial.print("HIGHEST DISTANCE : ");
+  Serial.println(highest_distance);
+  Serial.print("HIGHEST INDEX : ");
+  Serial.println(highest_distance_index);
+//   motors.setMotorsSpeed(50);
+//   motors.goRight();
+//   delay(DEG_90_TIME*(highest_distance_index/90));
+    for(int step = 89; step > (89-highest_distance_index); step--){
+      motors.setMotorsSpeed(100);
+      motors.goRight();
+    //   Serial.println("After right");
+      delay(STEP_TIME);
+      motors.stop();
+    }
+    // Serial.println("EXITING FOR LOOP");
+    motors.setMotorsSpeed(20);
+}
+
+void reset_IHM(char *dutycycle, string state)
+{
+    if (state=="start")
+    {
+        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_GUARD_CH, "guard_off");
+    }
+    else{
+        /* do nothing */
+    }
     clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_right");
     clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_left");
     clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_back");
@@ -179,27 +328,10 @@ void treatment_publish_flags(void)
 #endif
         clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_STATE_CH, main_buffer_state);
     }
+    if(!(fsm_t == GUARDING)){
     if (publish_temperature)
         clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_TEMP_CH, main_buffer_temp);
     if (publish_soc)
         clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_SOC_CH, main_buffer_soc);
-
-    if (treatment_cmd_t.ihm_managment == "turn_off")
-    {
-        Serial.println("STATE MOTORS : ");
-        Serial.print("old_state : ");
-        Serial.println(String(treatment_cmd_t.old_state_motors.c_str()));
-        Serial.print("actual state : ");
-        Serial.println(String(treatment_cmd_t.actual_state_motors.c_str()));
-        Serial.print("ihm mana : ");
-        Serial.println(String(treatment_cmd_t.ihm_managment.c_str()));
-        if (treatment_cmd_t.old_state_motors == "right")
-            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_right");
-        if (treatment_cmd_t.old_state_motors == "left")
-            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_left");
-        if (treatment_cmd_t.old_state_motors == "back")
-            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_back");
-        if (treatment_cmd_t.old_state_motors == "forward")
-            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_forward");
     }
 }

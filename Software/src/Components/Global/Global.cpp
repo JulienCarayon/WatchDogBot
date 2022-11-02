@@ -68,7 +68,7 @@ void init_lcd_ihm(LCD_16x2 lcd)
 
 bool hcsr501_get_data(void)
 {
-    return (bool)digitalRead(HC_SR501_PIN);
+    return (bool)(digitalRead(HC_SR501_PIN)==HIGH);
 }
 
 bool get_temperature_from_DHT(DHT_sensor dht_sensor, char *main_buffer, LCD_16x2 lcd)
@@ -131,43 +131,19 @@ bool get_voltage_percentage(char *main_buffer, LCD_16x2 lcd)
     return publish_soc;
 }
 
-uint8_t hcsr04_get_data(string sensor_position)
+float hcsr04_get_distance(void)
 {
-    long measure;
+  // Sending 10 µs pulse
+  digitalWrite(HC_SR04_TRIGGER_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(HC_SR04_TRIGGER_PIN, LOW);
 
-    // Sending 10 µs pulse
-    if (sensor_position == "left")
-    {
-        digitalWrite(HC_SR04_TRIGGER_PIN_LEFT, HIGH);
-        delayMicroseconds(10);
-        digitalWrite(HC_SR04_TRIGGER_PIN_LEFT, LOW);
+  // Measuring time between sending the TRIG pulse and its echo
+  long measure = pulseIn(HC_SR04_ECHO_PIN, HIGH, MEASURE_TIMEOUT);
 
-        // Measuring time between sending the TRIG pulse and its echo
-        measure = pulseIn(HC_SR04_ECHO_PIN_LEFT, HIGH, MEASURE_TIMEOUT);
-    }
-    else if (sensor_position == "right")
-    {
-        digitalWrite(HC_SR04_TRIGGER_PIN_RIGHT, HIGH);
-        delayMicroseconds(10);
-        digitalWrite(HC_SR04_TRIGGER_PIN_RIGHT, LOW);
-
-        measure = pulseIn(HC_SR04_ECHO_PIN_RIGHT, HIGH, MEASURE_TIMEOUT);
-    }
-
-    // Calculing the distance
-    float distance_mm = measure / 2.0 * SOUND_SPEED;
-
-#ifdef DEBUG_MODE
-    Serial.print(F("Distance: "));
-    Serial.print(distance_mm);
-    Serial.print(F("mm ("));
-    Serial.print(distance_mm / 10.0, 2);
-    Serial.print(F("cm, "));
-    Serial.print(distance_mm / 1000.0, 2);
-    Serial.println(F("m)"));
-#endif
-
-    return (uint8_t)distance_mm;
+  // Calculing the distance
+  float distance_mm = measure / 2.0 * SOUND_SPEED;
+  return distance_mm;
 }
 
 FSM_T roooh_static_member_reference_muste_beeeeee(FSM_T fsm_t, CALLBACK callbackReturnClass)
@@ -210,8 +186,8 @@ FSM_T roooh_static_member_reference_muste_beeeeee(FSM_T fsm_t, CALLBACK callback
 #ifdef DEBUG_MODE
         Serial.println("*** FROM TOPIC [DOG/SECURITY] ***");
 #endif
-        if (guardModeAcivate)
-            fsm_t = DETECTED;
+        // if (guardModeAcivate && callbackReturnClass.message != "RAS")
+        //     fsm_t = DETECTED;
     }
 
     return fsm_t;
@@ -371,7 +347,7 @@ TREATMENT_CMD_T control_motors(string message, ControlMotorsL298n *motors, WS281
     //          old_mes = back
 
     static TREATMENT_CMD_T treatment_cmd;
-    Serial.println("COUCOU LES LOULOUS ");
+    // Serial.println("COUCOU LES LOULOUS ");
 
     static string old_message = "init";
     static string return_old_message = "";
@@ -429,7 +405,7 @@ TREATMENT_CMD_T control_motors(string message, ControlMotorsL298n *motors, WS281
         treatment_cmd.go_forward = true;
         treatment_cmd.stop = false;
     }
-    else if (message == "stop")
+    else if (message == "no_left" || message == "no_right" || message == "no_back" || message == "no_forward")
     {
         motors->stop();
         treatment_cmd.go_right = false;
@@ -438,25 +414,7 @@ TREATMENT_CMD_T control_motors(string message, ControlMotorsL298n *motors, WS281
         treatment_cmd.go_forward = false;
         treatment_cmd.stop = true;
     }
-    return_old_message = old_message;
-    old_message = message;
-    if (old_message != return_old_message)
-    {
-        treatment_cmd.ihm_managment = "turn_off";
-        treatment_cmd.old_state_motors = return_old_message;
-        return_old_message = old_message;
-
-        if (message.find("no") != std::string::npos)
-        {
-            treatment_cmd.ihm_managment = "turn_off";
-            motors->stop();
-        }
-    }
-    else
-    {
-        treatment_cmd.ihm_managment = "do_nothing";
-    }
-
+ 
     return treatment_cmd;
 }
 

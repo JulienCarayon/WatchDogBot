@@ -18,10 +18,8 @@ using namespace std;
 
 #define HC_SR501_PIN 23
 
-#define HC_SR04_TRIGGER_PIN_LEFT 14
-#define HC_SR04_ECHO_PIN_LEFT 12
-#define HC_SR04_TRIGGER_PIN_RIGHT 26
-#define HC_SR04_ECHO_PIN_RIGHT 27
+#define HC_SR04_TRIGGER_PIN 26
+#define HC_SR04_ECHO_PIN 27
 #define HC_SR04_RIGHT "right"
 #define HC_SR04_LEFT "left"
 
@@ -94,7 +92,8 @@ const string state_mode[5] = {
     "MANUAL",
     "GUARDING",
     "DETECTED",
-    "ERROR"};
+    "ERROR"
+};
 
 /* HC-SR04*/
 const unsigned long MEASURE_TIMEOUT = 25000UL; // 25ms = ~8m à 340m/s
@@ -113,7 +112,7 @@ void init_lcd_ihm(LCD_16x2 lcd);
 bool hcsr501_get_data(void);
 bool get_temperature_from_DHT(DHT_sensor dht_sensor, char *main_buffer, LCD_16x2 lcd);
 bool get_voltage_percentage(char *main_buffer, LCD_16x2 lcd);
-uint8_t hcsr04_get_data(string sensor_position);
+float hcsr04_get_distance();
 FSM_T roooh_static_member_reference_muste_beeeeee(FSM_T fsm_t, CALLBACK callbackReturnClass);
 bool fsm_state(char *main_buffer_state, FSM_T fsm, g_fsm_flags *fsm_flags, LCD_16x2 lcd);
 TREATMENT_CMD_T control_motors(string message, ControlMotorsL298n *motors, WS2812B_Controller LED_strip);

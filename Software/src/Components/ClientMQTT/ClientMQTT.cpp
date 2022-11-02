@@ -76,6 +76,7 @@ void ClientMQTT::reconnectMQTT()
             _clientMQTT.subscribe(MQTT_SERIAL_GUARD_CH);
             _clientMQTT.subscribe(MQTT_SERIAL_SOC_CH);
             _clientMQTT.subscribe(MQTT_SERIAL_STATE_CH);
+            _clientMQTT.subscribe(MQTT_SERIAL_SECURITY_LOGGER_CH);
         }
         else
         {
