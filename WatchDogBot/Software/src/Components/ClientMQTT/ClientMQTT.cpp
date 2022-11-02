@@ -1,5 +1,8 @@
-#include "Components/ClientMQTT/ClientMQTT.hpp"
+#include "ClientMQTT.hpp"
 #include "Arduino.h"
+
+#define DEBUG_MODE
+//#undef DEBUG_MODE
 
 ClientMQTT::ClientMQTT(const char *ssid, const char *password, const char *mqtt_server,
                        uint16_t port, PubSubClient client)
@@ -22,6 +25,7 @@ void ClientMQTT::pubSubClientMQTT(WiFiClient wifiClient_obj)
 void ClientMQTT::setupWifiMQTT()
 {
     delay(10);
+
     // We start by connecting to a WiFi network
     Serial.println();
     Serial.print("Connecting to ");
@@ -41,12 +45,6 @@ void ClientMQTT::setupWifiMQTT()
             ESP.restart();
         }
     }
-
-    // while (WiFi.status() != WL_CONNECTED)
-    //  {
-    //      delay(500);
-    //      Serial.print(".");
-    //  }
 
     // print your WiFi shield's IP address:
     randomSeed(micros());
@@ -77,12 +75,15 @@ void ClientMQTT::reconnectMQTT()
             _clientMQTT.subscribe(MQTT_SERIAL_DUTYCYCLE_MOTORS_CH);
             _clientMQTT.subscribe(MQTT_SERIAL_GUARD_CH);
             _clientMQTT.subscribe(MQTT_SERIAL_SOC_CH);
+            _clientMQTT.subscribe(MQTT_SERIAL_STATE_CH);
+            _clientMQTT.subscribe(MQTT_SERIAL_SECURITY_LOGGER_CH);
         }
         else
         {
             Serial.print("failed, rc=");
             Serial.print(_clientMQTT.state());
             Serial.println(" try again in 5 seconds");
+
             // Wait 5 seconds before retrying
             int i = 5;
             while (i > 0)
@@ -132,12 +133,9 @@ CALLBACK ClientMQTT::callbackMQTT2(char *topic, uint8_t *payload, unsigned int l
 {
     CALLBACK callbackReturnClass;
 
-    // if (topic != "DOG/SOC")
-    //{
     Serial.print("\n*** MESSAGE ARRIVED [");
     Serial.print(topic);
     Serial.print("]\n");
-    //}
 
     char in_message[16];
     uint8_t in_message_len = 0;
@@ -156,15 +154,14 @@ CALLBACK ClientMQTT::callbackMQTT2(char *topic, uint8_t *payload, unsigned int l
         in_message[i] = char(payload[i]);
     }
 
-    // if (topic != "DOG/SOC")
-    //{
+#ifdef DEBUG_MODE
     Serial.println("-----------------------------------");
     Serial.print("Received from mqtt : ");
     Serial.println(in_message);
     Serial.println("----------------------------------- ***\n");
-    //}
-    string in_message_string = convertToString(in_message, in_message_len);
+#endif
 
+    string in_message_string = convertToString(in_message, in_message_len);
     callbackReturnClass.topic = (string)topic;
     callbackReturnClass.message = in_message_string;
 

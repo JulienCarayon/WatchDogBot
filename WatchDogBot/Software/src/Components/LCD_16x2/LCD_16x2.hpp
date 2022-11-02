@@ -1,3 +1,6 @@
+#ifndef LCD_16X2_H
+#define LCD_16X2_H
+
 #include <Arduino.h>
 #include <string>
 // #include <stdio.h>
@@ -26,3 +29,4 @@ private:
   LiquidCrystal_I2C _lcd;
   bool _backlightState;
 };
+#endif

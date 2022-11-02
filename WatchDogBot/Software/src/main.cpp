@@ -2,122 +2,78 @@
 #include "LiquidCrystal_I2C.h"
 #include "Wire.h"
 #include <WiFi.h>
-#include <PubSubClient.h>
 #include <string>
 #include <Adafruit_Sensor.h>
 #include <stdio.h>
 #include <stdlib.h>
-// Lib for upload with wifi
 #include <ESPmDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-// Lib for upload with webside
-//#include <AsyncTCP.h>
-//#include <ESPAsyncWebServer.h>
-//#include <AsyncElegantOTA.h>
-//
-#include "Components/LCD_16x2/LCD_16x2.hpp"
-#include "Components/ControlMotors/ControlMotors_L298n.hpp"
 #include "Components/ClientMQTT/ClientMQTT.hpp"
-#include "Components/WS2812B_LED_Controller/WS2812B_LED_Controller.hpp"
-#include "Components/DHT_sensor/DHT_sensor.hpp"
+#include "Components/PubSubClient/PubSubClient.hpp"
+#include "Components/Global/Global.hpp"
 
 using namespace std;
 
-// Update these with values suitable for your network.
+unsigned long previousMillis;
 
-// const char *ssid = "Livebox-0209";                   // Enter your WiFi name
-// const char *password = "4612EA4513FE6C618F8CCF7C70"; // Enter WiFi password
+char main_buffer_temp[10];
+char main_buffer_soc[10];
+char main_buffer_state[10];
+TREATMENT_CMD_T treatment_cmd_t;
+bool guarding_mode_activate = false;
+
+/* WIFI & MQTT VAR*/
+const char *ssid = "Livebox-0209";
+const char *password = "4612EA4513FE6C618F8CCF7C70";
 // const char *ssid = "SER@YNOV";
 // const char *password = "Q156@QeRd^YuRgRouX7T";
 // const char *ssid = "HUAWEI P30 lite";
-
 // const char *ssid = "iPhone de Julien";
 // const char *password = "0123456789";
-
-const char *ssid = "Freebox-5C96C4";
-const char *password = "9v6tvq6b2vqnx3zhq6w2f5";
-
-// AsyncWebServer server(80);
 const char *mqtt_server = "broker.emqx.io";
 uint16_t port = 1883;
-
-#define BUZZER_PIN 15
-
-#define HC_SR501_PIN 23
-
-#define HC_SR04_TRIGGER_PIN_LEFT 14
-#define HC_SR04_ECHO_PIN_LEFT 12
-#define HC_SR04_TRIGGER_PIN_RIGHT 26
-#define HC_SR04_ECHO_PIN_RIGHT 27
-#define HC_SR04_RIGHT "right"
-#define HC_SR04_LEFT "left"
-
-#define DHT_PIN 9
-#define DHT_TYPE DHT11
-
-#define BAT_PIN 36
-
-#define LED_I2C_ADDRESS 0x20
-#define LEDS_COUNT 10
-
-#define LCD_I2C_ADDRESS 0x27
-#define LCD_COLUMN_NUMBER 16
-#define LCD_LINE_NUMBER 2
-
-const unsigned long MEASURE_TIMEOUT = 25000UL; // 25ms = ~8m à 340m/s
-const float SOUND_SPEED = 340.0 / 1000;
-HC_SR04_DATA_T hc_sr04_data_t;
-FSM_T fsm_t = IDLE;
-g_fsm_flags fsm_flags;
-
-void test_motors(string message, ControlMotorsL298n motors);
-void treatmentMQTTCommands(CALLBACK command);
-uint8_t hcsr04_get_data(string sensor_position);
-bool hcsr501_get_data(void);
-uint16_t get_voltage_percentage();
-void guard_mode();
-void get_temperature_from_DHT(void);
-void police_BIP(void);
-void buzzer_off(void);
-
+string topic;
+string message;
 CALLBACK callbackStruct;
 
-uint8_t motor12_pin1 = 16;
-uint8_t motor12_pin2 = 17;
-uint8_t motor34_pin1 = 18;
-uint8_t motor34_pin2 = 5;
-uint8_t motorPWM12_pin = 4;
-uint8_t motorPWM34_pin = 19;
-uint8_t old_dutyCycle = 0;
+/* FSM VAR */
+FSM_T fsm_t = IDLE;
+FSM_T old_fsm_t = IDLE;
+char *fsm;
+g_fsm_flags fsm_flags;
 
+/* SOC VAR*/
 uint16_t soc_data = 0;
 uint16_t old_soc = 0;
 uint8_t soc = 0;
 uint16_t adc_read = 0;
 uint16_t div_voltage = 0;
 uint16_t bat_voltage = 0;
+bool publish_soc = false;
 
-string topic;
-string message;
+bool publish_state = false;
 
-bool guardModeAcivate = false;
-bool movement_detected = false;
-bool leftMode = false;
-bool rightMode = false;
-bool backMode = false;
+/* DHT SENSOR VAR */
+float temperature = 0.0;
+float old_temperature = 0.0;
+bool publish_temperature = false;
 
-float data = 0.0;
-unsigned long previousMillis;
+HC_SR04_DATA_T hc_sr04_data_t;
 
+void reset_IHM(char *dutycycle, string state);
+void treatment_publish_flags(void);
+bool guard_mode();
+void manageObstable();
+
+/* CLASS OBJECTS*/
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
-ControlMotorsL298n motors(motor12_pin1, motor12_pin2, motor34_pin1, motor34_pin2, motorPWM12_pin, motorPWM34_pin);
+ControlMotorsL298n motors(MOTOR12_PIN1, MOTOR12_PIN2, MOTOR34_PIN1, MOTOR34_PIN2, MOTORPWM12_PIN, MOTORPWM34_PIN);
 ClientMQTT clientMQTT(ssid, password, mqtt_server, port, client);
 WS2812B_Controller LED_strip(LED_I2C_ADDRESS, LEDS_COUNT, TYPE_GRB);
 LCD_16x2 lcd(LCD_I2C_ADDRESS, LCD_COLUMN_NUMBER, LCD_LINE_NUMBER);
-
-DHT_sensor test(9, DHT11);
+DHT_sensor temperature_sensor(9, DHT11);
 
 void initOTA()
 {
@@ -151,7 +107,7 @@ void initOTA()
                     { Serial.printf("Progress: %u%%\r", (progress / (total / 100))); })
         .onError([](ota_error_t error)
                  {
-    Serial.printf("Error[%u]: ", error);
+    Serial.printf("Error[%u]: ", error);        
     if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
     else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
     else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
@@ -164,8 +120,6 @@ void initOTA()
 void setup()
 {
     Serial.begin(115200);
-
-    // INIT FOR BOOTING WITH WIFI
     Serial.println("Booting");
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
@@ -177,26 +131,24 @@ void setup()
     }
 
     initOTA();
+
     Serial.println("Ready");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
-    //
 
     // BUZZER INIT
     pinMode(BUZZER_PIN, OUTPUT);
-
-    tone(BUZZER_PIN, 600);
-    delay(100);
-    tone(BUZZER_PIN, 0);
+    init_buzzer_sound();
 
     // LCD INIT
     lcd.initLCD();
-    lcd.displayStringLCD("WatchDog BOT", 0, 0);
+    lcd.displayStringLCD("WATCHDOG BOT", 2, 0);
+    lcd.displayStringLCD("... INIT ...", 2, 1);
     delay(2000);
     lcd.clearLCD();
 
     // DHT INIT
-    test.initDHT();
+    temperature_sensor.initDHT();
 
     // STRIP LED INIT
     LED_strip.begin();
@@ -208,12 +160,10 @@ void setup()
     pinMode(HC_SR501_PIN, INPUT);
 
     // HC-SR04 US SENSOR
-    pinMode(HC_SR04_TRIGGER_PIN_LEFT, OUTPUT);
-    pinMode(HC_SR04_ECHO_PIN_LEFT, INPUT);
-    digitalWrite(HC_SR04_TRIGGER_PIN_LEFT, LOW);
-    pinMode(HC_SR04_TRIGGER_PIN_RIGHT, OUTPUT);
-    pinMode(HC_SR04_ECHO_PIN_RIGHT, INPUT);
-    digitalWrite(HC_SR04_TRIGGER_PIN_RIGHT, LOW);
+
+    pinMode(HC_SR04_TRIGGER_PIN, OUTPUT);
+    pinMode(HC_SR04_ECHO_PIN, INPUT);
+    digitalWrite(HC_SR04_TRIGGER_PIN, LOW);
 
     // WIFI INIT
     Serial.setTimeout(500);
@@ -223,303 +173,240 @@ void setup()
     clientMQTT.setServerMQTT();
     clientMQTT.setCallbackMQTT();
     clientMQTT.reconnectMQTT();
+
+    // INIT IHM
+    reset_IHM("0", "start");
+    init_lcd_ihm(lcd);
+
+#ifdef DEBUG_MODE
+    Serial.print("motors obj add 0 : ");
+    std::cout << &motors << std::endl;
+#endif
 }
 
-// void loop_tag_v1()
 void loop()
 {
-
-    // FONCTION FOR UPDATE WITH WIFI//
     ArduinoOTA.handle();
     if (millis() - previousMillis >= 500)
     {
         previousMillis = millis();
         Serial.println(F("Code has been update"));
     }
-    //
+
+    // clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_PUBLISH_CH, std::to_string(hcsr04_get_distance("right")));
+    publish_temperature = get_temperature_from_DHT(temperature_sensor, main_buffer_temp, lcd);
+    publish_soc = get_voltage_percentage(main_buffer_soc, lcd);
 
     clientMQTT.loopMQTT();
     callbackStruct = clientMQTT.getCallbackReturn();
-    treatmentMQTTCommands(callbackStruct);
-
-    if (guardModeAcivate)
+    if (fsm_t != DETECTED)
     {
-        Serial.println("GUARD MODE ACTIVATE");
-        lcd.clearLineLCD(1);
-        lcd.displayStringLCD("GUARD MODE : ON ", 0, 0);
+        fsm_t = roooh_static_member_reference_muste_beeeeee(fsm_t, callbackStruct);
+    }
 
-        hc_sr04_data_t.distance_right = hcsr04_get_data(HC_SR04_RIGHT);
-        hc_sr04_data_t.distance_left = hcsr04_get_data(HC_SR04_LEFT);
+    delay(100);
 
-        if (hcsr501_get_data())
+    publish_state = fsm_state(main_buffer_state, fsm_t, &fsm_flags, lcd);
+    treatment_cmd_t = treatment_MQTT_Commands(callbackStruct, fsm_flags, &motors, LED_strip);
+
+    if (fsm_t == GUARDING && !guarding_mode_activate)
+    {
+        guarding_mode_activate = true;
+        reset_IHM("40", "guard");
+    }
+    if (fsm_t == MANUAL && guarding_mode_activate)
+    {
+        guarding_mode_activate = false;
+        reset_IHM("0", "manual");
+    }
+    // Serial.println("Before treatment_publish_flags");
+    treatment_publish_flags();
+    // Serial.println("After treatment_publish_flags");
+
+    LED_managment(treatment_cmd_t, LED_strip);
+    // delay(1000);
+    // Serial.println("E");
+    if (fsm_t == GUARDING)
+    {
+        Serial.println("ENTERING fsm_t == GUARDING");
+        bool detected = guard_mode();
+        Serial.print("detected state : ");
+        Serial.println(detected);
+        if (detected != 0)
         {
-            Serial.println("==================================== > Detected");
             LED_strip.policeGang();
-            police_BIP();
+            fsm_t = DETECTED;
         }
-        Serial.println("Distance right : " + String(hc_sr04_data_t.distance_right));
-        Serial.println("Distance left : " + String(hc_sr04_data_t.distance_left));
+        else
+        {
+            fsm_t = GUARDING;
+            // LED_strip.turnOFF();
+            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_SECURITY_LOGGER_CH, "RAS");
+        }
+        Serial.println("EXITING fsm_t == GUARDING");
+    }
+    if (fsm_t == DETECTED)
+    {
+        LED_strip.policeGang();
+        police_BIP();
+        motors.stop();
+        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_SECURITY_LOGGER_CH, "DETECTED");
+    }
+}
+
+uint16_t STEP_TIME = 3;
+uint16_t DEG_90_TIME = 350;
+uint16_t HALF_TURN_TIME = (DEG_90_TIME * 2);
+uint16_t DETECTION_TRESHOLD = 200;
+uint16_t ANGLE_VALUE = 90;
+uint16_t BACKING_TIME = 300;
+
+bool isObstacleDetected(void)
+{
+    if (hcsr04_get_distance() <= DETECTION_TRESHOLD)
+    {
+        return true;
     }
     else
     {
-        lcd.displayStringLCD("GUARD MODE : OFF", 0, 0);
-        lcd.clearLineLCD(1);
-        LED_strip.turnOFF();
-        buzzer_off();
-    }
-
-    // test.get_temperature_sensor();
-
-    /* blinking tests */
-    if (leftMode)
-        LED_strip.blinkingLeft();
-    if (rightMode)
-        LED_strip.blinkingRight();
-    if (backMode)
-        LED_strip.warning();
-    // LED_strip.WeWillFuckYou();
-
-    /* SOC tests*/
-    soc_data = get_voltage_percentage();
-}
-
-void loop_tada()
-{
-    clientMQTT.loopMQTT();
-    callbackStruct = clientMQTT.getCallbackReturn();
-    treatmentMQTTCommands(callbackStruct);
-}
-
-void fsm_state()
-{
-    switch (fsm_t)
-    {
-    case IDLE:
-        fsm_flags.idleState = true;
-        fsm_flags.manualState = false;
-        fsm_flags.guardingState = false;
-        fsm_flags.detectedState = false;
-        fsm_flags.errorState = false;
-        break;
-
-    case MANUAL:
-        fsm_flags.idleState = false;
-        fsm_flags.manualState = true;
-        fsm_flags.guardingState = false;
-        fsm_flags.detectedState = false;
-        fsm_flags.errorState = false;
-        break;
-
-    case GUARDING:
-        fsm_flags.idleState = false;
-        fsm_flags.manualState = false;
-        fsm_flags.guardingState = true;
-        fsm_flags.detectedState = false;
-        fsm_flags.errorState = false;
-        break;
-
-    case DETECTED:
-        fsm_flags.idleState = false;
-        fsm_flags.manualState = false;
-        fsm_flags.guardingState = false;
-        fsm_flags.detectedState = true;
-        fsm_flags.errorState = false;
-        break;
-
-    case ERROR:
-        fsm_flags.idleState = false;
-        fsm_flags.manualState = false;
-        fsm_flags.guardingState = false;
-        fsm_flags.detectedState = false;
-        fsm_flags.errorState = true;
-        break;
-    default:
-        fsm_t = IDLE;
-        break;
+        return false;
     }
 }
 
-void get_temperature_from_DHT(void)
+bool guard_mode()
 {
-    data = test.get_temperature_sensor();
-    char buffer[5];
-    int ret = snprintf(buffer, sizeof(buffer), "%f", data);
-    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_TEMP_CH, buffer);
-}
-
-uint16_t get_voltage_percentage()
-{
-    adc_read = analogRead(BAT_PIN);
-    div_voltage = (uint16_t)map(adc_read, 0, 4095, 0, 3300);
-    bat_voltage = (div_voltage * 1500) / 500;
-
-    soc = (uint8_t)map(bat_voltage, 0, 8400, 0, 100);
-    // Serial.println(soc);
-
-    if (soc > (old_soc + 1) || soc < (old_soc - 1))
-    {
-        old_soc = soc;
-        // Serial.println("SOC : " + soc);
-
-        char buffer[64];
-        int ret = snprintf(buffer, sizeof(buffer), "%d", soc);
-
-        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_SOC_CH, buffer);
-
-        return soc;
-    }
-    return 0;
-}
-
-// autonomous mode
-void test_motors(string message, ControlMotorsL298n motors)
-{
-    if (message == "right")
-    {
-        motors.goRight();
-        lcd.displayStringLCD("right", 0, 0);
-        LED_strip.blinkingRight();
-        rightMode = true;
-        leftMode = false;
-        backMode = false;
-    }
-    else if (message == "left")
-    {
-        motors.goLeft();
-        lcd.displayStringLCD("left", 0, 0);
-        LED_strip.blinkingLeft();
-        leftMode = true;
-        rightMode = false;
-        backMode = false;
-    }
-
-    else if (message == "back")
-    {
-        motors.goBack();
-        LED_strip.warning();
-        backMode = true;
-    }
-    else if (message == "forward")
-    {
-        leftMode = false;
-        rightMode = false;
-        motors.goForward();
-    }
-    else if (message == "no_left" || message == "no_right" || message == "no_back" || message == "no_forward" || message == "stop")
-    {
-        motors.stop();
-        backMode = false;
-    }
-}
-
-uint8_t hcsr04_get_data(string sensor_position)
-{
-    long measure;
-
-    // Sending 10 µs pulse
-    if (sensor_position == "left")
-    {
-        digitalWrite(HC_SR04_TRIGGER_PIN_LEFT, HIGH);
-        delayMicroseconds(10);
-        digitalWrite(HC_SR04_TRIGGER_PIN_LEFT, LOW);
-
-        // Measuring time between sending the TRIG pulse and its echo
-        measure = pulseIn(HC_SR04_ECHO_PIN_LEFT, HIGH, MEASURE_TIMEOUT);
-    }
-    else if (sensor_position == "right")
+    /* TO DO */
+    bool detected = false;
+    motors.setMotorsSpeed(40);
+    motors.goForward();
+    Serial.println("ENTERING GUARD FUNCTION");
+    if (isObstacleDetected())
     {
 
-        digitalWrite(HC_SR04_TRIGGER_PIN_RIGHT, HIGH);
-        delayMicroseconds(10);
-        digitalWrite(HC_SR04_TRIGGER_PIN_RIGHT, LOW);
-
-        // Measuring time between sending the TRIG pulse and its echo
-        measure = pulseIn(HC_SR04_ECHO_PIN_RIGHT, HIGH, MEASURE_TIMEOUT);
-    }
-
-    // Calculing the distance
-    float distance_mm = measure / 2.0 * SOUND_SPEED;
-
-    // Serial.print(F("Distance: "));
-    // Serial.print(distance_mm);
-    // Serial.print(F("mm ("));
-    // Serial.print(distance_mm / 10.0, 2);
-    // Serial.print(F("cm, "));
-    // Serial.print(distance_mm / 1000.0, 2);
-    // Serial.intln(F("m)"));
-
-    return (uint8_t)distance_mm;
-}
-
-bool hcsr501_get_data(void)
-{
-    return (bool)digitalRead(HC_SR501_PIN);
-}
-
-void treatmentMQTTCommands(CALLBACK command)
-{
-    if (command.new_message)
-    {
-        // Serial.print("main.cpp  : ");
-        // Serial.println(command.message.c_str());
-        topic = command.topic;
-        message = command.message;
-
-        if (topic == "DOG/DUTYCYCLE")
+        manageObstable();
+        int duration = 0;
+        delay(6000);
+        int i = 0;
+        while (i < 1000)
         {
-            if (old_dutyCycle != atoi(message.c_str()))
+            detected = hcsr501_get_data();
+            Serial.print("while : ");
+            Serial.println(detected);
+            if (detected)
             {
-                Serial.print("SET NEW MOTORS SPEED ....... ");
-                old_dutyCycle = atoi(message.c_str());
-                motors.setMotorsSpeed(atoi(message.c_str()));
-                // motors.getMotorsSpeed();
-                Serial.println("----> NEW MOTOR SPEED SET");
+                Serial.print("if detected : ");
+                Serial.println(detected);
+                break;
             }
-        }
-        else if (topic == "DOG/MOTORS")
-        {
-            test_motors(message, motors);
-        }
-        else if (topic == "DOG/TEMP")
-        {
-            Serial.println("*** FROM TOPIC [DOG/TEMP] ***");
-            get_temperature_from_DHT();
-        }
-        else if (topic == "DOG/SECURITY")
-        {
-            Serial.println("*** FROM TOPIC [DOG/SECURITY] ***");
-        }
-        else if (topic == "DOG/GUARD")
-        {
-            Serial.println("*** FROM TOPIC [DOG/GUARD] ***");
-            if (message == "guard_on")
-                guardModeAcivate = true;
-            else if (message == "guard_off")
-                guardModeAcivate = false;
+            delay(1);
+            i++;
         }
     }
-}
-
-void guard_mode()
-{
-}
-
-void police_BIP(void)
-{
-
-    for (uint16_t i = 600; i < 800; i++)
+    else
     {
-        tone(BUZZER_PIN, i);
-        delay(1);
     }
-    for (uint16_t i = 800; i > 600; i--)
-    {
-        tone(BUZZER_PIN, i);
-        delay(1);
-    }
+    Serial.println("EXITING GUARD FUNCTION");
+    Serial.print("detected state : ");
+    Serial.println(detected);
+    return detected;
 }
 
-void buzzer_off(void)
+void manageObstable()
 {
-    tone(BUZZER_PIN, 0);
+    motors.stop();
+    motors.setMotorsSpeed(20);
+    motors.goBack();
+    delay(BACKING_TIME);
+    motors.stop();
+    motors.setMotorsSpeed(80);
+    motors.goLeft();
+    delay(HALF_TURN_TIME);
+    motors.stop();
+
+    motors.goLeft();
+    delay(DEG_90_TIME);
+    motors.stop();
+
+    uint16_t ultraSound[90];
+    for (int i = 0; i < 89; i++)
+    {
+        motors.setMotorsSpeed(100);
+        motors.goRight();
+        delay(STEP_TIME);
+        motors.stop();
+        ultraSound[i] = hcsr04_get_distance();
+    }
+
+    // motors.goLeft();
+    // delay(DEG_90_TIME/2);
+    // motors.stop();
+
+    uint16_t highest_distance = 0;
+    uint16_t highest_distance_index = 0;
+
+    for (int scan = 0; scan < 89; scan++)
+    {
+        if (ultraSound[scan] > highest_distance)
+        {
+            highest_distance = ultraSound[scan];
+            highest_distance_index = scan;
+            Serial.print("LOOP scan : ");
+            Serial.println(scan);
+        }
+    }
+    Serial.print("HIGHEST DISTANCE : ");
+    Serial.println(highest_distance);
+    Serial.print("HIGHEST INDEX : ");
+    Serial.println(highest_distance_index);
+    //   motors.setMotorsSpeed(50);
+    //   motors.goRight();
+    //   delay(DEG_90_TIME*(highest_distance_index/90));
+    for (int step = 89; step > (89 - highest_distance_index); step--)
+    {
+        motors.setMotorsSpeed(100);
+        motors.goRight();
+        //   Serial.println("After right");
+        delay(STEP_TIME);
+        motors.stop();
+    }
+    // Serial.println("EXITING FOR LOOP");
+    motors.setMotorsSpeed(20);
+}
+
+void reset_IHM(char *dutycycle, string state)
+{
+    if (state == "start")
+    {
+        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_GUARD_CH, "guard_off");
+    }
+    else
+    {
+        /* do nothing */
+    }
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_right");
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_left");
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_back");
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_MOTORS_CH, "no_forward");
+    motors.stop();
+    motors.setMotorsSpeed(atoi(dutycycle));
+    clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_DUTYCYCLE_MOTORS_CH, dutycycle);
+}
+
+void treatment_publish_flags(void)
+{
+    if (publish_state)
+    {
+#ifdef DEBUG_MODE
+        Serial.print("STATE BUFFER : ");
+        Serial.println(main_buffer_state);
+#endif
+        clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_STATE_CH, main_buffer_state);
+    }
+    if (!(fsm_t == GUARDING))
+    {
+        if (publish_temperature)
+            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_TEMP_CH, main_buffer_temp);
+        if (publish_soc)
+            clientMQTT.publishSerialDataMQTT(MQTT_SERIAL_SOC_CH, main_buffer_soc);
+    }
 }

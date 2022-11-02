@@ -619,3 +619,28 @@ void WS2812B_Controller::turnOFF(void)
         show();
     }
 }
+
+void WS2812B_Controller::frontCarHeadlight(void)
+{
+    for (int i = 0; i <= 4; i++)
+    {
+        if (i != 2)
+        {
+            setLedColor(i, 255, 255, 255);
+            show();
+        }
+    }
+}
+
+void WS2812B_Controller::backCarHeadlight(void)
+{
+    for (int i = 5; i <= 9; i++)
+    {
+        if (i != 7)
+        {
+            setLedColor(i, 255, 0, 0);
+            show();
+        }
+    }
+}
+
